@@ -1,0 +1,16 @@
+{
+  "name": "gaming-community-bot",
+  "version": "0.1.0",
+  "description": "Discord bot pro herní komunitu",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "pg": "^8.12.0"
+  }
+}
