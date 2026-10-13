@@ -115,9 +115,8 @@ async function openTicket(interaction, categoryId) {
       ],
     });
     const message = await channel.send({
-      content: `<@${interaction.user.id}> <@&${settings.staffRole}>`,
+      ...buildTicketMessage(ticket, { ping: `<@${interaction.user.id}> <@&${settings.staffRole}>` }),
       allowedMentions: { users: [interaction.user.id], roles: [settings.staffRole] },
-      ...buildTicketMessage(ticket),
     });
     await query('UPDATE tickets SET channel_id = $1, panel_message_id = $2 WHERE id = $3', [channel.id, message.id, ticket.id]);
     await interaction.editReply(`Ticket je připravený: ${channel}`);
@@ -244,7 +243,11 @@ async function closeTicket(interaction) {
   const { rows: notes } = await query('SELECT * FROM ticket_notes WHERE ticket_id = $1 ORDER BY created_at', [ticket.id]);
   const category = getCategory(ticket.category);
   const messages = await fetchAllMessages(interaction.channel);
-  const base = { ticket, categoryLabel: category.label, guildName: interaction.guild.name, messages };
+  const opener = await interaction.client.users.fetch(ticket.user_id).catch(() => null);
+  const base = {
+    ticket, categoryLabel: category.label, guildName: interaction.guild.name, messages,
+    openerName: opener?.username ?? ticket.user_id,
+  };
   const fileName = `ticket-${pad(ticket.id)}.html`;
   const staffFile = () => new AttachmentBuilder(Buffer.from(renderTranscript({ ...base, notes })), { name: fileName });
   const userFile = () => new AttachmentBuilder(Buffer.from(renderTranscript(base)), { name: fileName });

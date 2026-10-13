@@ -36,7 +36,7 @@ function renderMessage(m) {
   return `<div class="msg"><div class="head"><b>${esc(name)}</b>${m.author.bot ? ' <span class="bot">BOT</span>' : ''} <span class="time">${fmt.format(m.createdAt)}</span></div>${body}${files}${embeds}</div>`;
 }
 
-export function renderTranscript({ ticket, categoryLabel, guildName, messages, notes = [] }) {
+export function renderTranscript({ ticket, categoryLabel, guildName, messages, notes = [], openerName }) {
   const noteHtml = notes.length
     ? `<h2>Interní poznámky</h2>${notes
         .map((n) => `<div class="msg note"><div class="head"><b>${esc(n.author_name)}</b> <span class="time">${fmt.format(n.created_at)}</span></div>${br(n.content)}</div>`)
@@ -52,5 +52,7 @@ h1{font-size:20px;margin:0 0 4px}h2{font-size:16px;margin:32px 0 8px}.sub{color:
 .note{background:#2b2d31;padding:8px 12px;border-radius:6px;margin-bottom:6px;border:0}
 </style></head><body><h1>Ticket #${ticket.id} · ${esc(categoryLabel)}</h1>
 <div class="sub">${esc(guildName)} · vytvořen ${fmt.format(ticket.created_at)}</div>
+<div class="embed"><strong>Vytvořil:</strong> ${esc(openerName)}<br>${(ticket.answers ?? [])
+  .map((a) => `<em>${esc(a.label)}</em>: ${br(a.value || '—')}`).join('<br>')}</div>
 ${messages.map(renderMessage).join('')}${noteHtml}</body></html>`;
 }

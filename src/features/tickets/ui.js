@@ -1,4 +1,7 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
+import {
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, MessageFlags, SeparatorBuilder,
+  SeparatorSpacingSize, StringSelectMenuBuilder, TextDisplayBuilder,
+} from 'discord.js';
 import { colors } from '../../theme.js';
 import { CATEGORIES, getCategory } from './categories.js';
 
@@ -8,18 +11,25 @@ const PRIORITY_COLORS = { low: colors.neutral, normal: colors.accent, high: colo
 export const pad = (id) => String(id).padStart(4, '0');
 export const clip = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
+const text = (content) => new TextDisplayBuilder().setContent(content);
+const divider = () => new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small);
+const gap = () => new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small);
+
 // Veřejný panel "Support Center" s výběrem kategorie.
 export function buildPanel() {
-  const list = CATEGORIES.map(
-    (c, i) => `**${i + 1}. ${c.label}**\n${c.description}${c.badge ? `\n-# ${c.badge}` : ''}`,
-  ).join('\n\n');
+  const container = new ContainerBuilder()
+    .setAccentColor(colors.accent)
+    .addTextDisplayComponents(
+      text('## Support Center\nPotřebuješ pomoc? Jsme tu pro tebe.\n**Vyber kategorii, která nejlépe odpovídá tomu, co potřebuješ řešit.**'),
+    )
+    .addSeparatorComponents(divider());
 
-  const embed = new EmbedBuilder()
-    .setColor(colors.accent)
-    .setTitle('Support Center')
-    .setDescription(
-      `Potřebuješ pomoc? Jsme tu pro tebe.\nVyber kategorii, která nejlépe odpovídá tomu, co potřebuješ řešit.\n\n${list}`,
+  CATEGORIES.forEach((c, i) => {
+    container.addTextDisplayComponents(
+      text(`${c.emoji}  **${c.label}**\n${c.description}${c.badge ? `\n-# ${c.badge}` : ''}`),
     );
+    if (i < CATEGORIES.length - 1) container.addSeparatorComponents(gap());
+  });
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId('ticket:open')
@@ -33,7 +43,11 @@ export function buildPanel() {
       })),
     );
 
-  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)] };
+  container
+    .addSeparatorComponents(divider())
+    .addActionRowComponents(new ActionRowBuilder().addComponents(menu));
+
+  return { components: [container], flags: MessageFlags.IsComponentsV2 };
 }
 
 function controls() {
@@ -50,24 +64,33 @@ function controls() {
   ];
 }
 
-// Hlavní zpráva uvnitř ticketu (přehled + ovládací tlačítka).
-export function buildTicketMessage(ticket) {
+// Hlavní zpráva uvnitř ticketu. `ping` (text s označením) se přidá jen při vytvoření.
+export function buildTicketMessage(ticket, { ping } = {}) {
   const category = getCategory(ticket.category);
   const closed = ticket.status === 'closed';
+  const claimed = ticket.claimed_by ? `Převzal <@${ticket.claimed_by}>` : 'Nepřiřazeno';
 
-  const embed = new EmbedBuilder()
-    .setColor(PRIORITY_COLORS[ticket.priority] ?? colors.accent)
-    .setTitle(`Ticket #${pad(ticket.id)}`)
-    .setDescription(`${category.label} · ${closed ? 'Uzavřený' : 'Otevřený'}`)
-    .addFields(
-      { name: 'Vytvořil', value: `<@${ticket.user_id}>`, inline: true },
-      { name: 'Priorita', value: PRIORITIES[ticket.priority], inline: true },
-      { name: 'Stav', value: ticket.claimed_by ? `Převzal <@${ticket.claimed_by}>` : 'Nepřiřazeno', inline: true },
-      ...ticket.answers.map((a) => ({ name: a.label, value: clip(a.value || '—', 1024) })),
+  const answers = ticket.answers
+    .map((a) => `**${a.label}**\n${clip(a.value || '—', 600)}`)
+    .join('\n\n');
+
+  const container = new ContainerBuilder()
+    .setAccentColor(PRIORITY_COLORS[ticket.priority] ?? colors.accent)
+    .addTextDisplayComponents(text(`### Ticket #${pad(ticket.id)}\n${category.label} · ${closed ? 'Uzavřený' : 'Otevřený'}`))
+    .addSeparatorComponents(divider())
+    .addTextDisplayComponents(
+      text(`**Vytvořil:** <@${ticket.user_id}>\n**Priorita:** ${PRIORITIES[ticket.priority]}\n**Stav:** ${claimed}`),
     )
-    .setTimestamp(new Date(ticket.created_at));
+    .addSeparatorComponents(divider())
+    .addTextDisplayComponents(text(answers));
 
-  return { embeds: [embed], components: closed ? [] : controls() };
+  if (!closed) {
+    container.addSeparatorComponents(divider());
+    controls().forEach((row) => container.addActionRowComponents(row));
+  }
+
+  const components = ping ? [text(ping), container] : [container];
+  return { components, flags: MessageFlags.IsComponentsV2 };
 }
 
 export function ratingRow(ticketId) {
