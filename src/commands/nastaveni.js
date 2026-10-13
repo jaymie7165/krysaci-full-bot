@@ -4,6 +4,7 @@ import { buildPanel } from '../features/tickets/ui.js';
 import { buildRolesPanel } from '../features/roles/ui.js';
 import { allRoleDefs } from '../features/roles/data.js';
 import { welcomeMember } from '../features/welcome/index.js';
+import { buildLfgPanel } from '../features/lfg/ui.js';
 
 const EPHEMERAL = MessageFlags.Ephemeral;
 
@@ -27,6 +28,11 @@ export const data = new SlashCommandBuilder()
     s.setName('welcome').setDescription('Nastaví kanál s přivítáním nových členů')
       .addChannelOption((o) => o.setName('kanal').setDescription('Kanál, kde se zobrazí přivítání').addChannelTypes(ChannelType.GuildText).setRequired(true)),
   )
+  .addSubcommand((s) =>
+    s.setName('lfg').setDescription('Nastaví hledání spoluhráčů a pošle panel do zvoleného kanálu')
+      .addChannelOption((o) => o.setName('kanal').setDescription('Společný kanál pro LFG příspěvky').addChannelTypes(ChannelType.GuildText).setRequired(true))
+      .addChannelOption((o) => o.setName('kategorie').setDescription('Kategorie pro dočasné voice roomky (výchozí: kategorie LFG kanálu)').addChannelTypes(ChannelType.GuildCategory)),
+  )
   .addSubcommand((s) => s.setName('welcome-test').setDescription('Vyzkouší přivítání na tobě'));
 
 export async function execute(interaction) {
@@ -34,6 +40,7 @@ export async function execute(interaction) {
   if (sub === 'tickety') return setupTickets(interaction);
   if (sub === 'role') return setupRoles(interaction);
   if (sub === 'welcome') return setupWelcome(interaction);
+  if (sub === 'lfg') return setupLfg(interaction);
   if (sub === 'welcome-test') return testWelcome(interaction);
 }
 
@@ -103,4 +110,12 @@ async function testWelcome(interaction) {
     `DM: ${result.dm ? 'odesláno' : 'nelze doručit (máš zavřené DM od členů serveru?)'}`,
   ];
   await interaction.editReply(lines.join('\n'));
+}
+
+async function setupLfg(interaction) {
+  const channel = interaction.options.getChannel('kanal', true);
+  const category = interaction.options.getChannel('kategorie');
+  await saveSettings(interaction.guildId, { lfgChannel: channel.id, lfgCategory: category?.id ?? null });
+  await channel.send(buildLfgPanel());
+  await interaction.reply({ content: `Hotovo. Panel pro hledání spoluhráčů je v ${channel}. Příkaz /lfg funguje kdekoli.`, flags: EPHEMERAL });
 }
