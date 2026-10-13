@@ -31,6 +31,12 @@ export async function initDb() {
       close_reason TEXT,
       rating INT
     );
+    CREATE TABLE IF NOT EXISTS profiles (
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      other_activities JSONB NOT NULL DEFAULT '[]',
+      PRIMARY KEY (guild_id, user_id)
+    );
     CREATE TABLE IF NOT EXISTS ticket_notes (
       id SERIAL PRIMARY KEY,
       ticket_id INT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,

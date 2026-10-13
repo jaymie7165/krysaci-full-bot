@@ -3,10 +3,17 @@ import { config } from './config.js';
 import { initDb } from './db.js';
 import { commands } from './commands/index.js';
 import { handleTicketInteraction } from './features/tickets/index.js';
+import { handleRolesInteraction } from './features/roles/index.js';
+import { onMemberAdd } from './features/welcome/index.js';
 
 const client = new Client({
   // MessageContent je potřeba pro přepisy ticketů (zapni ho v Developer Portalu).
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers, // vítání nových členů (zapni Server Members Intent v Developer Portalu)
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
 });
 
 client.once(Events.ClientReady, async (c) => {
@@ -25,6 +32,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
     const feature = interaction.customId?.split(':')[0];
     if (feature === 'ticket') await handleTicketInteraction(interaction);
+    else if (feature === 'roles') await handleRolesInteraction(interaction);
   } catch (err) {
     console.error(err);
     const payload = { content: 'Něco se pokazilo. Zkus to prosím znovu, případně kontaktuj správce.', flags: MessageFlags.Ephemeral };
@@ -32,6 +40,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     else await interaction.reply(payload).catch(() => {});
   }
 });
+
+client.on(Events.GuildMemberAdd, (member) => onMemberAdd(member).catch(console.error));
 
 await initDb();
 await client.login(config.token);
