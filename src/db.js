@@ -37,6 +37,30 @@ export async function initDb() {
       other_activities JSONB NOT NULL DEFAULT '[]',
       PRIMARY KEY (guild_id, user_id)
     );
+    CREATE TABLE IF NOT EXISTS lfg_posts (
+      id SERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      message_id TEXT,
+      founder_id TEXT NOT NULL,
+      game_id TEXT NOT NULL,
+      game_name TEXT NOT NULL,
+      capacity INT NOT NULL,
+      mode_text TEXT NOT NULL DEFAULT '',
+      rank_text TEXT NOT NULL DEFAULT '',
+      time_text TEXT NOT NULL DEFAULT '',
+      vibe_text TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'open',
+      voice_channel_id TEXT,
+      voice_empty_since TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS lfg_members (
+      post_id INT NOT NULL REFERENCES lfg_posts(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (post_id, user_id)
+    );
     CREATE TABLE IF NOT EXISTS ticket_notes (
       id SERIAL PRIMARY KEY,
       ticket_id INT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
