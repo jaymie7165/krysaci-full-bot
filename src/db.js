@@ -61,6 +61,32 @@ export async function initDb() {
       joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       PRIMARY KEY (post_id, user_id)
     );
+    CREATE TABLE IF NOT EXISTS custom_lobbies (
+      id SERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      message_id TEXT,
+      organizer_id TEXT NOT NULL,
+      mode TEXT NOT NULL DEFAULT '5v5',
+      note TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'open',
+      winner TEXT,
+      voice_blue TEXT,
+      voice_red TEXT,
+      voice_empty_since TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      finished_at TIMESTAMPTZ
+    );
+    CREATE TABLE IF NOT EXISTS custom_players (
+      lobby_id INT NOT NULL REFERENCES custom_lobbies(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      team TEXT,
+      positions TEXT NOT NULL DEFAULT '',
+      rank_idx INT,
+      joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (lobby_id, user_id)
+    );
+    ALTER TABLE lfg_posts ADD COLUMN IF NOT EXISTS founder_avatar TEXT;
     CREATE TABLE IF NOT EXISTS ticket_notes (
       id SERIAL PRIMARY KEY,
       ticket_id INT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
