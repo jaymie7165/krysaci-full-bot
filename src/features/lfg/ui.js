@@ -1,6 +1,6 @@
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, MessageFlags, SeparatorBuilder,
-  SeparatorSpacingSize, TextDisplayBuilder,
+  SectionBuilder, SeparatorSpacingSize, TextDisplayBuilder, ThumbnailBuilder,
 } from 'discord.js';
 import { colors } from '../../theme.js';
 import { RANKS } from '../roles/data.js';
@@ -13,34 +13,46 @@ export const hraci = (n) => (n === 1 ? '1 hráče' : n >= 2 && n <= 4 ? `${n} hr
 
 const STATUS_COLORS = { open: colors.accent, full: colors.success, closed: colors.neutral, expired: colors.neutral };
 
+const bar = (n, max) => '▰'.repeat(Math.min(n, max)) + '▱'.repeat(Math.max(max - n, 0));
+
 export function buildPost(post, members, { ping } = {}) {
   const count = members.length;
   const missing = Math.max(post.capacity - count, 0);
-  const titles = {
-    open: `Hledáme ${hraci(missing)} · ${post.game_name}`,
-    full: `Parta je kompletní · ${post.game_name}`,
-    closed: `Hledání ukončeno · ${post.game_name}`,
-    expired: `Hledání vypršelo · ${post.game_name}`,
+  const subtitles = {
+    open: `**Hledáme ${hraci(missing)}** · ${count}/${post.capacity}`,
+    full: `**Parta je kompletní** · ${count}/${post.capacity}`,
+    closed: `**Hledání ukončeno** · ${count}/${post.capacity}`,
+    expired: `**Hledání vypršelo** · ${count}/${post.capacity}`,
   };
 
   const rankLabel = RANKS[post.game_id] ? 'Rank' : 'Obtížnost';
-  const lines = [
+  const details = [
     ['Režim', post.mode_text],
     [rankLabel, post.rank_text],
     ['Čas', post.time_text],
     ['Atmosféra', post.vibe_text],
-  ].filter(([, v]) => v).map(([k, v]) => `**${k}:** ${v}`);
+  ].filter(([, v]) => v).map(([k, v]) => `-# ${k}\n${v}`);
 
   if (post.status !== 'open') {
-    lines.push(`**Hráči:** ${members.map((m) => `<@${m.user_id}>`).join(', ')}`);
+    details.push(`-# Hráči\n${members.map((m) => `<@${m.user_id}>`).join(', ')}`);
   }
-  if (post.status === 'full' && post.voice_channel_id) lines.push(`**Voice:** <#${post.voice_channel_id}>`);
+  if (post.status === 'full' && post.voice_channel_id) details.push(`-# Voice\n<#${post.voice_channel_id}>`);
 
-  const container = new ContainerBuilder()
-    .setAccentColor(STATUS_COLORS[post.status] ?? colors.accent)
-    .addTextDisplayComponents(text(`### ${titles[post.status]}\n-# Zakladatel: <@${post.founder_id}> · ${count}/${post.capacity}`))
-    .addSeparatorComponents(divider())
-    .addTextDisplayComponents(text(lines.length ? lines.join('\n') : '—'));
+  const head = text(
+    `### ${post.game_name}\n${subtitles[post.status]}\n${bar(count, post.capacity)}\n-# Zakladatel: <@${post.founder_id}>`,
+  );
+
+  const container = new ContainerBuilder().setAccentColor(STATUS_COLORS[post.status] ?? colors.accent);
+  if (post.founder_avatar) {
+    container.addSectionComponents(
+      new SectionBuilder().addTextDisplayComponents(head).setThumbnailAccessory(new ThumbnailBuilder().setURL(post.founder_avatar)),
+    );
+  } else {
+    container.addTextDisplayComponents(head);
+  }
+  container.addSeparatorComponents(divider());
+
+  container.addTextDisplayComponents(text(details.length ? details.join('\n') : '—'));
 
   if (post.status === 'open') {
     container.addSeparatorComponents(divider()).addActionRowComponents(

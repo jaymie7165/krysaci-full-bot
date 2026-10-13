@@ -99,11 +99,12 @@ async function createPost(interaction, gameId) {
   if (existing.length) return interaction.editReply('Už máš aktivní hledání.');
 
   const { rows: [post] } = await query(
-    `INSERT INTO lfg_posts (guild_id, channel_id, founder_id, game_id, game_name, capacity, mode_text, rank_text, time_text, vibe_text)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+    `INSERT INTO lfg_posts (guild_id, channel_id, founder_id, game_id, game_name, capacity, mode_text, rank_text, time_text, vibe_text, founder_avatar)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
     [
       interaction.guildId, channel.id, interaction.user.id, gameId, gameName, capacity,
       f('mode'), other ? '' : f('rank'), f('time') || 'Co nejdřív', f('vibe'),
+      interaction.member.displayAvatarURL({ size: 128 }),
     ],
   );
   await query('INSERT INTO lfg_members (post_id, user_id) VALUES ($1, $2)', [post.id, interaction.user.id]);
