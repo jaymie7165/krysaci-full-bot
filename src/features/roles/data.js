@@ -42,3 +42,12 @@ export function allRoleDefs() {
   }
   return defs;
 }
+
+// Rank hráče z LoL rank rolí (index do RANKS.lol), nebo null.
+export function lolRankFromMember(member, roleMap) {
+  if (!roleMap) return null;
+  for (let i = RANKS.lol.length - 1; i >= 0; i--) {
+    if (member.roles.cache.has(roleMap[`rank:lol:${i}`])) return i;
+  }
+  return null;
+}
