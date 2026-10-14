@@ -5,7 +5,7 @@ import { getSettings, query } from '../../db.js';
 import { colors } from '../../theme.js';
 import { RANKS } from '../roles/data.js';
 import { checkAchievements } from '../achievements/index.js';
-import { RiotError, TIERS, getAccount, getIconId, getSoloRank, hasKey, iconUrl } from './api.js';
+import { RiotError, TIERS, findPlatform, getAccount, getIconId, getSoloRank, hasKey, iconUrl } from './api.js';
 
 const EPHEMERAL = MessageFlags.Ephemeral;
 
@@ -51,15 +51,25 @@ async function startLink(interaction) {
     );
     if (taken.length) return interaction.editReply('Tento účet je už propojený s jiným členem.');
 
-    // Ověření vlastnictví: člen si na chvíli nastaví náhodnou základní ikonu profilu.
-    const current = await getIconId(account.puuid);
-    const choices = Array.from({ length: 29 }, (_, i) => i).filter((i) => i !== current);
-    const icon = choices[Math.floor(Math.random() * choices.length)];
+    // Zjistíme, na jakém serveru účet hraje (EUNE, EUW...).
+    const found = await findPlatform(account.puuid);
+    if (!found) {
+      return interaction.editReply('Účet existuje, ale na žádném evropském serveru jsem v League of Legends nenašel hráče. Hraješ na jiném serveru?');
+    }
+
+    // Ověření vlastnictví: člen si na chvíli nastaví základní ikonu profilu. Při opakovaném
+    // pokusu používáme stejnou ikonu, aby ta z prvního obrázku pořád platila.
+    const { rows: [previous] } = await query('SELECT * FROM riot_links WHERE guild_id = $1 AND user_id = $2', [interaction.guildId, interaction.user.id]);
+    let icon = previous && !previous.verified && previous.puuid === account.puuid ? previous.pending_icon : null;
+    if (icon == null) {
+      const choices = Array.from({ length: 29 }, (_, i) => i).filter((i) => i !== found.iconId);
+      icon = choices[Math.floor(Math.random() * choices.length)];
+    }
     await query(
-      `INSERT INTO riot_links (guild_id, user_id, puuid, riot_id, pending_icon) VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (guild_id, user_id) DO UPDATE SET puuid = $3, riot_id = $4, verified = false, pending_icon = $5,
+      `INSERT INTO riot_links (guild_id, user_id, puuid, riot_id, pending_icon, platform) VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (guild_id, user_id) DO UPDATE SET puuid = $3, riot_id = $4, verified = false, pending_icon = $5, platform = $6,
          tier = NULL, division = NULL, rank_idx = NULL, updated_at = now()`,
-      [interaction.guildId, interaction.user.id, account.puuid, `${account.gameName}#${account.tagLine}`, icon],
+      [interaction.guildId, interaction.user.id, account.puuid, `${account.gameName}#${account.tagLine}`, icon, found.platform],
     );
 
     const url = await iconUrl(icon);
@@ -67,7 +77,7 @@ async function startLink(interaction) {
       .setDescription(
         `Našel jsem účet **${account.gameName}#${account.tagLine}**.\n\n` +
         'Aby bylo jisté, že je tvůj, nastav si v League of Legends na chvíli **profilovou ikonu z obrázku níže** ' +
-        '(Profil → klik na ikonu → Ikony profilu). Pak klikni na Ověřit. Ikonu si potom můžeš vrátit.',
+        `(Profil → klik na ikonu → Ikony profilu). Ikona má číslo **${icon}**. Pak klikni na Ověřit. Ikonu si potom můžeš vrátit.`,
       );
     if (url) embed.setImage(url);
     await interaction.editReply({
@@ -86,9 +96,15 @@ async function verifyLink(interaction) {
   if (link.verified) return interaction.editReply(`Účet **${link.riot_id}** už je ověřený.`);
 
   try {
-    const icon = await getIconId(link.puuid);
+    const icon = await getIconId(link.puuid, link.platform ?? undefined);
+    if (icon == null) {
+      return interaction.editReply('Na serveru, kde účet hledám, jsem ho nenašel. Zkus znovu tlačítko Propojit LoL účet, bot server najde sám.');
+    }
     if (icon !== link.pending_icon) {
-      return interaction.editReply('Ikona zatím nesedí. Změna se v API někdy projeví se zpožděním, zkus to za chvíli znovu.');
+      return interaction.editReply(
+        `Ikona zatím nesedí. Bot teď vidí ikonu č. **${icon}**, ale potřebuje č. **${link.pending_icon}**.\n` +
+        'Riot změnu někdy ukáže se zpožděním (minuty). Zkus to znovu za chvíli, případně se v LoL odhlas a přihlas.',
+      );
     }
     await query('UPDATE riot_links SET verified = true, pending_icon = NULL, updated_at = now() WHERE guild_id = $1 AND user_id = $2', [interaction.guildId, interaction.user.id]);
     const idx = await syncRank(interaction.guild, interaction.user.id).catch(() => null);
@@ -108,7 +124,7 @@ export async function syncRank(guild, userId) {
   const { rows: [link] } = await query('SELECT * FROM riot_links WHERE guild_id = $1 AND user_id = $2 AND verified', [guild.id, userId]);
   if (!link) return null;
 
-  const rank = await getSoloRank(link.puuid);
+  const rank = await getSoloRank(link.puuid, link.platform ?? undefined);
   if (!rank) return link.rank_idx ?? null;
   const idx = TIERS.indexOf(rank.tier);
   await query('UPDATE riot_links SET tier = $3, division = $4, rank_idx = $5, updated_at = now() WHERE guild_id = $1 AND user_id = $2', [guild.id, userId, rank.tier, rank.division, idx]);

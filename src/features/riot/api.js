@@ -32,13 +32,26 @@ async function call(host, path) {
 export const getAccount = (name, tag) =>
   call(region, `/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(name)}/${encodeURIComponent(tag)}`);
 
-export async function getIconId(puuid) {
-  const summoner = await call(config.riotPlatform, `/lol/summoner/v4/summoners/by-puuid/${puuid}`);
+// Servery (platformy) ve stejné oblasti jako ten výchozí, kvůli automatickému nalezení účtu.
+const PLATFORMS_IN_REGION = (platform) => Object.keys(REGIONS).filter((p) => REGIONS[p] === (REGIONS[platform] ?? 'europe'));
+
+export async function getIconId(puuid, platform = config.riotPlatform) {
+  const summoner = await call(platform, `/lol/summoner/v4/summoners/by-puuid/${puuid}`);
   return summoner?.profileIconId ?? null;
 }
 
-export async function getSoloRank(puuid) {
-  const entries = await call(config.riotPlatform, `/lol/league/v4/entries/by-puuid/${puuid}`);
+// Zjistí, na kterém serveru účet hraje (EUNE, EUW...), aby nezáleželo na nastavení RIOT_PLATFORM.
+export async function findPlatform(puuid) {
+  const candidates = [config.riotPlatform, ...PLATFORMS_IN_REGION(config.riotPlatform).filter((p) => p !== config.riotPlatform)];
+  for (const platform of candidates) {
+    const iconId = await getIconId(puuid, platform);
+    if (iconId != null) return { platform, iconId };
+  }
+  return null;
+}
+
+export async function getSoloRank(puuid, platform = config.riotPlatform) {
+  const entries = await call(platform, `/lol/league/v4/entries/by-puuid/${puuid}`);
   const solo = entries?.find((e) => e.queueType === 'RANKED_SOLO_5x5');
   return solo ? { tier: solo.tier, division: solo.rank } : null;
 }
