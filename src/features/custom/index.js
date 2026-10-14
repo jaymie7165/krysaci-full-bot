@@ -4,6 +4,8 @@ import {
 } from 'discord.js';
 import { getSettings, query } from '../../db.js';
 import { RANKS } from '../roles/data.js';
+import { checkAchievements } from '../achievements/index.js';
+import { syncRank } from '../riot/index.js';
 import { balancedSplit, randomSplit } from './teams.js';
 import { POSITIONS, STARTERS, buildLobby } from './ui.js';
 
@@ -209,13 +211,15 @@ async function manualSplit(interaction, id) {
   await interaction.editReply({ content: 'Týmy jsou rozdělené.', components: [] });
 }
 
-// Před vyvažováním načte aktuální ranky z rolí.
+// Před vyvažováním načte aktuální ranky: z Riot API u propojených účtů, jinak z rank rolí.
 async function refreshRanks(guild, players, roleMap) {
+  const synced = new Map();
+  for (const p of players) synced.set(p.user_id, await syncRank(guild, p.user_id).catch(() => null));
   const members = await guild.members.fetch({ user: players.map((p) => p.user_id) }).catch(() => null);
   const out = [];
   for (const p of players) {
     const m = members?.get(p.user_id);
-    const rank = m ? rankFromMember(m, roleMap) : p.rank_idx;
+    const rank = synced.get(p.user_id) ?? (m ? rankFromMember(m, roleMap) : p.rank_idx);
     await query('UPDATE custom_players SET rank_idx = $1 WHERE lobby_id = $2 AND user_id = $3', [rank, p.lobby_id, p.user_id]);
     out.push({ ...p, rank_idx: rank });
   }
@@ -229,34 +233,48 @@ async function applyTeams(client, guild, lobby, blue, red, settings) {
   );
   await deleteVoices(client, lobby);
 
+  // Soukromé roomky: vidí je a připojí se jen hráči týmu, tým (moderátoři) a bot.
   const lobbyChannel = await client.channels.fetch(lobby.channel_id);
-  const makeVoice = (label, ids) => guild.channels.create({
-    name: `${label} · Custom #${lobby.id}`,
+  const makeVoice = (name, ids) => guild.channels.create({
+    name,
     type: ChannelType.GuildVoice,
     parent: lobbyChannel.parentId ?? null,
     reason: 'Custom hra',
     permissionOverwrites: [
-      { id: guild.roles.everyone.id, allow: [P.ViewChannel], deny: [P.Connect] },
-      ...ids.map((id) => ({ id, allow: [P.ViewChannel, P.Connect, P.Speak] })),
-      ...(settings.staffRole ? [{ id: settings.staffRole, allow: [P.ViewChannel, P.Connect, P.MoveMembers] }] : []),
-      { id: client.user.id, allow: [P.ViewChannel, P.Connect, P.ManageChannels, P.MoveMembers] },
+      { id: guild.roles.everyone.id, deny: [P.ViewChannel, P.Connect] },
+      ...ids.map((id) => ({ id, allow: [P.ViewChannel, P.Connect, P.Speak, P.SendMessages, P.ReadMessageHistory] })),
+      ...(settings.staffRole ? [{ id: settings.staffRole, allow: [P.ViewChannel, P.Connect, P.MoveMembers, P.SendMessages] }] : []),
+      { id: client.user.id, allow: [P.ViewChannel, P.Connect, P.ManageChannels, P.MoveMembers, P.SendMessages, P.ReadMessageHistory] },
     ],
   });
-  const [voiceBlue, voiceRed] = await Promise.all([makeVoice('Blue Team', blue), makeVoice('Red Team', red)]);
+  const [voiceBlue, voiceRed] = await Promise.all([makeVoice('〉🔵| Blue Side', blue), makeVoice('〉🔴| Red Side', red)]);
 
   await query(
     `UPDATE custom_lobbies SET status = 'teams', winner = NULL, voice_blue = $2, voice_red = $3, voice_empty_since = now() WHERE id = $1`,
     [lobby.id, voiceBlue.id, voiceRed.id],
   );
-  const notMoved = [...(await moveToVoice(guild, blue, voiceBlue)), ...(await moveToVoice(guild, red, voiceRed))];
+  await moveToVoice(guild, blue, voiceBlue);
+  await moveToVoice(guild, red, voiceRed);
   await refreshLobby(client, lobby.id);
 
-  const all = [...blue, ...red];
+  // Pozvánka přímo do chatu každé voice roomky, s označením týmu a soupiskou.
+  const players = await getPlayers(lobby.id);
+  const announce = (channel, emoji, side, ids) => {
+    const roster = ids.map((id) => {
+      const p = players.find((x) => x.user_id === id);
+      return `<@${id}>${p?.positions ? ` · ${p.positions}` : ''}`;
+    }).join('\n');
+    return channel.send({
+      content: `${emoji} **${side}**: tvůj tým je tady! ${ids.map((id) => `<@${id}>`).join(' ')}\n\n**Soupiska**\n${roster}\n\nPřipoj se do tohoto voice kanálu, hra brzy začne.`,
+      allowedMentions: { users: ids },
+    });
+  };
+  await Promise.all([announce(voiceBlue, '🔵', 'Blue Side', blue), announce(voiceRed, '🔴', 'Red Side', red)]);
+
+  // V kanálu s lobby jen krátká informace bez označování.
   await lobbyChannel.send({
-    content:
-      `Týmy jsou rozdělené! ${all.map((u) => `<@${u}>`).join(' ')}\n🔵 Blue: ${voiceBlue} · 🔴 Red: ${voiceRed}` +
-      (notMoved.length ? `\nNení ve voice, připojte se do své roomky: ${notMoved.map((u) => `<@${u}>`).join(' ')}` : ''),
-    allowedMentions: { users: all },
+    content: `Týmy jsou rozdělené. Každý tým má svou soukromou voice roomku a označení najde v jejím chatu.\n🔵 ${voiceBlue} · 🔴 ${voiceRed}`,
+    allowedMentions: { parse: [] },
     reply: { messageReference: lobby.message_id, failIfNotExists: false },
   });
 }
@@ -322,6 +340,7 @@ async function confirmWinner(interaction, id, team) {
   );
   if (!upd.rowCount) return interaction.update({ content: 'Výsledek už je zapsaný.', components: [] });
   await refreshLobby(interaction.client, id);
+  for (const p of (await getPlayers(id)).filter((x) => x.team)) checkAchievements(interaction.client, interaction.guildId, p.user_id);
   await interaction.update({ content: 'Výsledek je uložený. Prázdné voice roomky se za chvíli samy smažou.', components: [] });
 }
 
