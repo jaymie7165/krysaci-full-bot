@@ -40,6 +40,11 @@ export const data = new SlashCommandBuilder()
       .addChannelOption((o) => o.setName('navrhy').setDescription('Kanál, kam se budou posílat nápady od členů').addChannelTypes(ChannelType.GuildText).setRequired(true))
       .addChannelOption((o) => o.setName('milniky').setDescription('Kanál pro oznámení nových milníků (volitelné)').addChannelTypes(ChannelType.GuildText)),
   )
+  .addSubcommand((s) =>
+    s.setName('lounge').setDescription('Zapne Voice Lounge: vlastní dočasné roomky pro členy')
+      .addChannelOption((o) => o.setName('kategorie').setDescription('Kategorie, ve které se budou roomky vytvářet').addChannelTypes(ChannelType.GuildCategory).setRequired(true))
+      .addChannelOption((o) => o.setName('vstup').setDescription('Hlasový kanál pro vytvoření roomky (když nevyplníš, bot ho vytvoří)').addChannelTypes(ChannelType.GuildVoice)),
+  )
   .addSubcommand((s) => s.setName('welcome-test').setDescription('Vyzkouší přivítání na tobě'));
 
 export async function execute(interaction) {
@@ -49,6 +54,7 @@ export async function execute(interaction) {
   if (sub === 'welcome') return setupWelcome(interaction);
   if (sub === 'lfg') return setupLfg(interaction);
   if (sub === 'komunita') return setupCommunity(interaction);
+  if (sub === 'lounge') return setupLounge(interaction);
   if (sub === 'welcome-test') return testWelcome(interaction);
 }
 
@@ -138,4 +144,15 @@ async function setupCommunity(interaction) {
   });
   await panel.send(buildCommunityPanel());
   await interaction.reply({ content: `Hotovo. Panel Komunita je v ${panel}, nápady se budou posílat do ${suggestions}.`, flags: EPHEMERAL });
+}
+
+async function setupLounge(interaction) {
+  await interaction.deferReply({ flags: EPHEMERAL });
+  const category = interaction.options.getChannel('kategorie', true);
+  let entry = interaction.options.getChannel('vstup');
+  if (!entry) {
+    entry = await interaction.guild.channels.create({ name: '〉➕| Vytvořit roomku', type: ChannelType.GuildVoice, parent: category.id });
+  }
+  await saveSettings(interaction.guildId, { loungeCreator: entry.id, loungeCategory: category.id });
+  await interaction.editReply(`Hotovo. Kdo vstoupí do ${entry}, dostane vlastní roomku v kategorii ${category}.`);
 }
