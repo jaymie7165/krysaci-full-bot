@@ -4,6 +4,7 @@ import {
 } from 'discord.js';
 import { getSettings, query } from '../../db.js';
 import { GAMES, RANKS, gameById } from '../roles/data.js';
+import { checkAchievements } from '../achievements/index.js';
 import { buildPost } from './ui.js';
 
 const EPHEMERAL = MessageFlags.Ephemeral;
@@ -118,6 +119,7 @@ async function createPost(interaction, gameId) {
     });
     await query('UPDATE lfg_posts SET message_id = $1 WHERE id = $2', [message.id, post.id]);
     await interaction.editReply(`Hledání je zveřejněné: ${message.url}`);
+    checkAchievements(interaction.client, interaction.guildId, interaction.user.id);
   } catch (err) {
     await query('DELETE FROM lfg_posts WHERE id = $1', [post.id]);
     throw err;
@@ -135,6 +137,7 @@ async function join(interaction, id) {
   const ins = await query('INSERT INTO lfg_members (post_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING 1', [id, interaction.user.id]);
   if (!ins.rowCount) return interaction.reply({ content: 'Už v partě jsi.', flags: EPHEMERAL });
 
+  checkAchievements(interaction.client, interaction.guildId, interaction.user.id);
   let members = await getMembers(id);
   if (members.length > post.capacity) {
     await query('DELETE FROM lfg_members WHERE post_id = $1 AND user_id = $2', [id, interaction.user.id]);
