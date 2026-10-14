@@ -12,11 +12,13 @@ import { handleCommunityInteraction } from './features/community/index.js';
 import { handleSuggestionInteraction } from './features/community/suggestions.js';
 import { handleEventInteraction, startEventSweeper } from './features/events/index.js';
 import { handleTournamentInteraction } from './features/tournaments/index.js';
+import { cleanupLounges, handleLoungeInteraction, onVoiceStateUpdate } from './features/lounge/index.js';
 
 const client = new Client({
   // MessageContent je potřeba pro přepisy ticketů (zapni ho v Developer Portalu).
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildVoiceStates, // Voice Lounge
     GatewayIntentBits.GuildMembers, // vítání nových členů (zapni Server Members Intent v Developer Portalu)
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
@@ -31,6 +33,7 @@ client.once(Events.ClientReady, async (c) => {
   startLfgSweeper(c);
   startCustomSweeper(c);
   startEventSweeper(c);
+  cleanupLounges(c).catch(console.error);
   console.log(`Bot běží jako ${c.user.tag}`);
 });
 
@@ -50,6 +53,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     else if (feature === 'sug') await handleSuggestionInteraction(interaction);
     else if (feature === 'event') await handleEventInteraction(interaction);
     else if (feature === 'tour') await handleTournamentInteraction(interaction);
+    else if (feature === 'lounge') await handleLoungeInteraction(interaction);
   } catch (err) {
     console.error(err);
     const payload = { content: 'Něco se pokazilo. Zkus to prosím znovu, případně kontaktuj správce.', flags: MessageFlags.Ephemeral };
@@ -58,6 +62,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
+client.on(Events.VoiceStateUpdate, (oldState, newState) => onVoiceStateUpdate(oldState, newState).catch(console.error));
 client.on(Events.GuildMemberAdd, (member) => onMemberAdd(member).catch(console.error));
 
 await initDb();
