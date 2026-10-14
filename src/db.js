@@ -184,6 +184,14 @@ export async function initDb() {
       team_b INT,
       winner INT
     );
+    CREATE TABLE IF NOT EXISTS lounges (
+      channel_id TEXT PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      locked BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    ALTER TABLE riot_links ADD COLUMN IF NOT EXISTS platform TEXT;
     CREATE TABLE IF NOT EXISTS ticket_notes (
       id SERIAL PRIMARY KEY,
       ticket_id INT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
