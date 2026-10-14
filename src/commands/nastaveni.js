@@ -5,6 +5,7 @@ import { buildRolesPanel } from '../features/roles/ui.js';
 import { allRoleDefs } from '../features/roles/data.js';
 import { welcomeMember } from '../features/welcome/index.js';
 import { buildLfgPanel } from '../features/lfg/ui.js';
+import { buildCommunityPanel } from '../features/community/index.js';
 
 const EPHEMERAL = MessageFlags.Ephemeral;
 
@@ -33,6 +34,12 @@ export const data = new SlashCommandBuilder()
       .addChannelOption((o) => o.setName('kanal').setDescription('Společný kanál pro LFG příspěvky').addChannelTypes(ChannelType.GuildText).setRequired(true))
       .addChannelOption((o) => o.setName('kategorie').setDescription('Kategorie pro dočasné voice roomky (výchozí: kategorie LFG kanálu)').addChannelTypes(ChannelType.GuildCategory)),
   )
+  .addSubcommand((s) =>
+    s.setName('komunita').setDescription('Nastaví panel Komunita (profil, nápady, propojení LoL), návrhy a milníky')
+      .addChannelOption((o) => o.setName('panel').setDescription('Kanál, kam se pošle panel Komunita').addChannelTypes(ChannelType.GuildText).setRequired(true))
+      .addChannelOption((o) => o.setName('navrhy').setDescription('Kanál, kam se budou posílat nápady od členů').addChannelTypes(ChannelType.GuildText).setRequired(true))
+      .addChannelOption((o) => o.setName('milniky').setDescription('Kanál pro oznámení nových milníků (volitelné)').addChannelTypes(ChannelType.GuildText)),
+  )
   .addSubcommand((s) => s.setName('welcome-test').setDescription('Vyzkouší přivítání na tobě'));
 
 export async function execute(interaction) {
@@ -41,6 +48,7 @@ export async function execute(interaction) {
   if (sub === 'role') return setupRoles(interaction);
   if (sub === 'welcome') return setupWelcome(interaction);
   if (sub === 'lfg') return setupLfg(interaction);
+  if (sub === 'komunita') return setupCommunity(interaction);
   if (sub === 'welcome-test') return testWelcome(interaction);
 }
 
@@ -118,4 +126,16 @@ async function setupLfg(interaction) {
   await saveSettings(interaction.guildId, { lfgChannel: channel.id, lfgCategory: category?.id ?? null });
   await channel.send(buildLfgPanel());
   await interaction.reply({ content: `Hotovo. Panel pro hledání spoluhráčů je v ${channel}. Příkaz /lfg funguje kdekoli.`, flags: EPHEMERAL });
+}
+
+async function setupCommunity(interaction) {
+  const panel = interaction.options.getChannel('panel', true);
+  const suggestions = interaction.options.getChannel('navrhy', true);
+  const achievements = interaction.options.getChannel('milniky');
+  await saveSettings(interaction.guildId, {
+    suggestionChannel: suggestions.id,
+    achievementChannel: achievements?.id ?? null,
+  });
+  await panel.send(buildCommunityPanel());
+  await interaction.reply({ content: `Hotovo. Panel Komunita je v ${panel}, nápady se budou posílat do ${suggestions}.`, flags: EPHEMERAL });
 }

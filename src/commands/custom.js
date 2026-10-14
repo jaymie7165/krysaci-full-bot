@@ -1,9 +1,10 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { createLobby, showHistory } from '../features/custom/index.js';
 
 export const data = new SlashCommandBuilder()
   .setName('custom')
-  .setDescription('LoL custom hry')
+  .setDescription('LoL custom hry (jen správci)')
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .setDMPermission(false)
   .addSubcommand((s) =>
     s.setName('vytvorit').setDescription('Založí lobby pro LoL custom hru (jen tým)')
