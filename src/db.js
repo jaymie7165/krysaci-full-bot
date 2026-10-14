@@ -87,6 +87,103 @@ export async function initDb() {
       PRIMARY KEY (lobby_id, user_id)
     );
     ALTER TABLE lfg_posts ADD COLUMN IF NOT EXISTS founder_avatar TEXT;
+    CREATE TABLE IF NOT EXISTS riot_links (
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      puuid TEXT NOT NULL,
+      riot_id TEXT NOT NULL,
+      verified BOOLEAN NOT NULL DEFAULT false,
+      pending_icon INT,
+      tier TEXT,
+      division TEXT,
+      rank_idx INT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (guild_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS achievements (
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      key TEXT NOT NULL,
+      earned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (guild_id, user_id, key)
+    );
+    CREATE TABLE IF NOT EXISTS suggestions (
+      id SERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      message_id TEXT,
+      author_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS suggestion_votes (
+      suggestion_id INT NOT NULL REFERENCES suggestions(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      vote SMALLINT NOT NULL,
+      PRIMARY KEY (suggestion_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS events (
+      id SERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      message_id TEXT,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      starts_at TIMESTAMPTZ NOT NULL,
+      capacity INT,
+      created_by TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      reminded BOOLEAN NOT NULL DEFAULT false,
+      started BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS event_signups (
+      event_id INT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      attended BOOLEAN NOT NULL DEFAULT false,
+      PRIMARY KEY (event_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS tournaments (
+      id SERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      message_id TEXT,
+      bracket_message_id TEXT,
+      name TEXT NOT NULL,
+      format TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'signup',
+      max_players INT NOT NULL DEFAULT 40,
+      created_by TEXT NOT NULL,
+      winner_team INT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS tournament_teams (
+      id SERIAL PRIMARY KEY,
+      tournament_id INT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      captain_id TEXT NOT NULL,
+      seed INT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS tournament_players (
+      tournament_id INT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      rank_idx INT,
+      team_id INT REFERENCES tournament_teams(id) ON DELETE SET NULL,
+      joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (tournament_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS tournament_matches (
+      id SERIAL PRIMARY KEY,
+      tournament_id INT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      round INT NOT NULL,
+      idx INT NOT NULL,
+      team_a INT,
+      team_b INT,
+      winner INT
+    );
     CREATE TABLE IF NOT EXISTS ticket_notes (
       id SERIAL PRIMARY KEY,
       ticket_id INT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,

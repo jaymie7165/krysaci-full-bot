@@ -7,6 +7,11 @@ import { handleRolesInteraction } from './features/roles/index.js';
 import { onMemberAdd } from './features/welcome/index.js';
 import { handleLfgInteraction, startLfgSweeper } from './features/lfg/index.js';
 import { handleCustomInteraction, startCustomSweeper } from './features/custom/index.js';
+import { handleRiotInteraction } from './features/riot/index.js';
+import { handleCommunityInteraction } from './features/community/index.js';
+import { handleSuggestionInteraction } from './features/community/suggestions.js';
+import { handleEventInteraction, startEventSweeper } from './features/events/index.js';
+import { handleTournamentInteraction } from './features/tournaments/index.js';
 
 const client = new Client({
   // MessageContent je potřeba pro přepisy ticketů (zapni ho v Developer Portalu).
@@ -25,6 +30,7 @@ client.once(Events.ClientReady, async (c) => {
   });
   startLfgSweeper(c);
   startCustomSweeper(c);
+  startEventSweeper(c);
   console.log(`Bot běží jako ${c.user.tag}`);
 });
 
@@ -39,6 +45,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
     else if (feature === 'roles') await handleRolesInteraction(interaction);
     else if (feature === 'lfg') await handleLfgInteraction(interaction);
     else if (feature === 'custom') await handleCustomInteraction(interaction);
+    else if (feature === 'riot') await handleRiotInteraction(interaction);
+    else if (feature === 'community') await handleCommunityInteraction(interaction);
+    else if (feature === 'sug') await handleSuggestionInteraction(interaction);
+    else if (feature === 'event') await handleEventInteraction(interaction);
+    else if (feature === 'tour') await handleTournamentInteraction(interaction);
   } catch (err) {
     console.error(err);
     const payload = { content: 'Něco se pokazilo. Zkus to prosím znovu, případně kontaktuj správce.', flags: MessageFlags.Ephemeral };

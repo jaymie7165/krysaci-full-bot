@@ -12,4 +12,7 @@ export const config = {
   guildId: process.env.GUILD_ID,
   databaseUrl: process.env.DATABASE_URL,
   databaseSsl: process.env.DATABASE_SSL === 'true',
+  // Riot API je volitelné. Bez klíče se propojení LoL účtu a automatický rank vypnou.
+  riotKey: process.env.RIOT_API_KEY || null,
+  riotPlatform: (process.env.RIOT_PLATFORM || 'eun1').toLowerCase(),
 };
