@@ -4,6 +4,7 @@ import * as custom from './custom.js';
 import * as turnaj from './turnaj.js';
 import * as event from './event.js';
 import * as pulse from './pulse.js';
+import * as stream from './stream.js';
 
 export const commands = new Map([
   [nastaveni.data.name, nastaveni],
@@ -12,4 +13,5 @@ export const commands = new Map([
   [turnaj.data.name, turnaj],
   [event.data.name, event],
   [pulse.data.name, pulse],
+  [stream.data.name, stream],
 ]);

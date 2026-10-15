@@ -6,6 +6,7 @@ import { allRoleDefs } from '../features/roles/data.js';
 import { welcomeMember } from '../features/welcome/index.js';
 import { buildLfgPanel } from '../features/lfg/ui.js';
 import { buildCommunityPanel } from '../features/community/index.js';
+import { createStatsChannels } from '../features/stats/index.js';
 
 const EPHEMERAL = MessageFlags.Ephemeral;
 
@@ -45,6 +46,15 @@ export const data = new SlashCommandBuilder()
       .addChannelOption((o) => o.setName('kategorie').setDescription('Kategorie, ve které se budou roomky vytvářet').addChannelTypes(ChannelType.GuildCategory).setRequired(true))
       .addChannelOption((o) => o.setName('vstup').setDescription('Hlasový kanál pro vytvoření roomky (když nevyplníš, bot ho vytvoří)').addChannelTypes(ChannelType.GuildVoice)),
   )
+  .addSubcommand((s) =>
+    s.setName('statistiky').setDescription('Vytvoří kanály s počtem členů a botů')
+      .addChannelOption((o) => o.setName('kategorie').setDescription('Kategorie pro statistiky (když nevyplníš, bot vytvoří 📊 STATS)').addChannelTypes(ChannelType.GuildCategory)),
+  )
+  .addSubcommand((s) =>
+    s.setName('stream').setDescription('Nastaví kanál pro oznámení streamů')
+      .addChannelOption((o) => o.setName('kanal').setDescription('Kanál, kam se budou oznamovat streamy').addChannelTypes(ChannelType.GuildText).setRequired(true))
+      .addRoleOption((o) => o.setName('role').setDescription('Role, která se označí při zahájení streamu (volitelné)')),
+  )
   .addSubcommand((s) => s.setName('welcome-test').setDescription('Vyzkouší přivítání na tobě'));
 
 export async function execute(interaction) {
@@ -55,6 +65,8 @@ export async function execute(interaction) {
   if (sub === 'lfg') return setupLfg(interaction);
   if (sub === 'komunita') return setupCommunity(interaction);
   if (sub === 'lounge') return setupLounge(interaction);
+  if (sub === 'statistiky') return setupStats(interaction);
+  if (sub === 'stream') return setupStream(interaction);
   if (sub === 'welcome-test') return testWelcome(interaction);
 }
 
@@ -155,4 +167,18 @@ async function setupLounge(interaction) {
   }
   await saveSettings(interaction.guildId, { loungeCreator: entry.id, loungeCategory: category.id });
   await interaction.editReply(`Hotovo. Kdo vstoupí do ${entry}, dostane vlastní roomku v kategorii ${category}.`);
+}
+
+async function setupStats(interaction) {
+  await interaction.deferReply({ flags: EPHEMERAL });
+  const { parent, membersChannel, botsChannel } = await createStatsChannels(interaction.guild, interaction.options.getChannel('kategorie'));
+  await saveSettings(interaction.guildId, { statsMembers: membersChannel.id, statsBots: botsChannel.id });
+  await interaction.editReply(`Hotovo. Statistiky jsou v kategorii ${parent}. Čísla se aktualizují sama, nejdéle do 10 minut.`);
+}
+
+async function setupStream(interaction) {
+  const channel = interaction.options.getChannel('kanal', true);
+  const role = interaction.options.getRole('role');
+  await saveSettings(interaction.guildId, { streamChannel: channel.id, streamRole: role?.id ?? null });
+  await interaction.reply({ content: `Hotovo. Streamy se budou oznamovat v ${channel}. Streamery přidáš příkazem /stream pridat.`, flags: EPHEMERAL });
 }
