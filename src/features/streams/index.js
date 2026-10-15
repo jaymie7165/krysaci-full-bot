@@ -151,33 +151,46 @@ export async function handleStreamCommand(interaction) {
   if (sub === 'odebrat') return remove(interaction);
 }
 
-async function add(interaction) {
-  await interaction.deferReply({ flags: EPHEMERAL });
-  const platform = interaction.options.getString('platforma', true);
-  const raw = interaction.options.getString('kanal', true).trim().replace(/^https?:\/\/(www\.)?(twitch\.tv|kick\.com)\//i, '').replace(/\/.*$/, '').replace(/^@/, '');
-  const member = interaction.options.getUser('clen');
+// Z textu s odkazem (twitch.tv/nazev, kick.com/nazev) vytáhne platformu a název kanálu.
+export function parseStreamLink(value = '') {
+  const m = String(value).match(/(?:^|[/\s.@])(twitch\.tv|kick\.com)\/@?([A-Za-z0-9_-]{2,40})/i);
+  return m ? { platform: m[1].toLowerCase().startsWith('twitch') ? 'twitch' : 'kick', login: m[2].toLowerCase() } : null;
+}
 
-  if (platform === 'twitch' && !hasTwitch()) return interaction.editReply('Twitch není nastavený (chybí TWITCH_CLIENT_ID a TWITCH_CLIENT_SECRET na Railway).');
-  if (platform === 'kick' && !hasKick()) return interaction.editReply('Kick není nastavený (chybí KICK_CLIENT_ID a KICK_CLIENT_SECRET na Railway).');
+// Ověří kanál na platformě a přidá ho do seznamu sledovaných. Používá /stream pridat i schválení v ticketu.
+export async function registerStreamer(guildId, platform, rawChannel, discordUserId = null) {
+  const raw = String(rawChannel).trim().replace(/^https?:\/\/(www\.)?(twitch\.tv|kick\.com)\//i, '').replace(/[/?#].*$/, '').replace(/^@/, '');
+  if (platform === 'twitch' && !hasTwitch()) return { ok: false, text: 'Twitch není nastavený (chybí TWITCH_CLIENT_ID a TWITCH_CLIENT_SECRET na Railway).' };
+  if (platform === 'kick' && !hasKick()) return { ok: false, text: 'Kick není nastavený (chybí KICK_CLIENT_ID a KICK_CLIENT_SECRET na Railway).' };
 
   let info;
   try {
     info = platform === 'twitch' ? await twitchUser(raw.toLowerCase()) : await kickChannel(raw.toLowerCase());
   } catch (err) {
     console.error(err);
-    return interaction.editReply('Nepodařilo se spojit s platformou. Zkontroluj přístupové údaje a zkus to znovu.');
+    return { ok: false, text: 'Nepodařilo se spojit s platformou. Zkontroluj přístupové údaje a zkus to znovu.' };
   }
-  if (!info) return interaction.editReply(`Kanál **${raw}** jsem na ${PLATFORM[platform].name} nenašel.`);
+  if (!info) return { ok: false, text: `Kanál **${raw}** jsem na ${PLATFORM[platform].name} nenašel.` };
 
   const ins = await query(
     `INSERT INTO streamers (guild_id, platform, login, platform_id, display_name, avatar_url, discord_user_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (guild_id, platform, login) DO NOTHING RETURNING id`,
-    [interaction.guildId, platform, info.login.toLowerCase(), info.platformId, info.displayName, info.avatar, member?.id ?? null],
+    [guildId, platform, info.login.toLowerCase(), info.platformId, info.displayName, info.avatar, discordUserId],
   );
-  if (!ins.rowCount) return interaction.editReply('Tento kanál už je v seznamu.');
+  if (!ins.rowCount) return { ok: false, text: 'Tento kanál už je v seznamu.' };
+  return { ok: true, text: `Přidáno: **${info.displayName}** (${PLATFORM[platform].name}).` };
+}
+
+async function add(interaction) {
+  await interaction.deferReply({ flags: EPHEMERAL });
+  const result = await registerStreamer(
+    interaction.guildId, interaction.options.getString('platforma', true),
+    interaction.options.getString('kanal', true), interaction.options.getUser('clen')?.id ?? null,
+  );
+  if (!result.ok) return interaction.editReply(result.text);
   const settings = await getSettings(interaction.guildId);
   await interaction.editReply(
-    `Přidáno: **${info.displayName}** (${PLATFORM[platform].name}). Pokud už streamuje, oznámení přijde do minuty.` +
+    `${result.text} Pokud už streamuje, oznámení přijde do minuty.` +
     (settings.streamChannel ? '' : '\nPozor: ještě nemáš nastavený kanál pro oznámení. Použij /nastaveni stream.'),
   );
 }
