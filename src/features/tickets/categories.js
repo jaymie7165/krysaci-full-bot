@@ -1,4 +1,7 @@
 // Kategorie ticketů a otázky formuláře. Discord povoluje max. 5 polí a popisek do 45 znaků.
+// Popisek pole s odkazem se používá i při schvalování streamera, proto je v konstantě.
+export const STREAMER_LINK_LABEL = 'Odkaz na tvůj kanál';
+
 export const CATEGORIES = [
   {
     id: 'general', emoji: '💬', label: 'Obecná pomoc',
@@ -53,6 +56,16 @@ export const CATEGORIES = [
     fields: [
       { id: 'idea', label: 'Co navrhuješ?', style: 'long' },
       { id: 'benefit', label: 'Jak by to komunitě pomohlo?', style: 'long' },
+    ],
+  },
+  {
+    id: 'streamer', emoji: '🎥', label: 'Role streamera',
+    description: 'Žádost o roli streamera. Bot pak bude oznamovat tvoje streamy.',
+    fields: [
+      { id: 'platform', label: 'Platforma', style: 'short', placeholder: 'Twitch nebo Kick' },
+      { id: 'link', label: STREAMER_LINK_LABEL, style: 'short', placeholder: 'Např. https://twitch.tv/tvojekanal' },
+      { id: 'content', label: 'Co streamuješ?', style: 'long', placeholder: 'Hry nebo obsah, který se na kanálu objevuje' },
+      { id: 'schedule', label: 'Jak často streamuješ?', style: 'short', required: false, placeholder: 'Např. 3× týdně večer' },
     ],
   },
   {

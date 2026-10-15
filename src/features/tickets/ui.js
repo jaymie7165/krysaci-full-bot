@@ -50,7 +50,7 @@ export function buildPanel() {
   return { components: [container], flags: MessageFlags.IsComponentsV2 };
 }
 
-function controls() {
+function controls(ticket) {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('ticket:claim').setLabel('Převzít').setStyle(ButtonStyle.Primary),
@@ -60,6 +60,9 @@ function controls() {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('ticket:note').setLabel('Interní poznámka').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('ticket:close').setLabel('Uzavřít').setStyle(ButtonStyle.Danger),
+      ...(ticket.category === 'streamer'
+        ? [new ButtonBuilder().setCustomId('ticket:approve').setLabel('Schválit streamera').setStyle(ButtonStyle.Success)]
+        : []),
     ),
   ];
 }
@@ -86,7 +89,7 @@ export function buildTicketMessage(ticket, { ping } = {}) {
 
   if (!closed) {
     container.addSeparatorComponents(divider());
-    controls().forEach((row) => container.addActionRowComponents(row));
+    controls(ticket).forEach((row) => container.addActionRowComponents(row));
   }
 
   const components = ping ? [text(ping), container] : [container];

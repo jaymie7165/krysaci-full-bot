@@ -4,7 +4,8 @@ import {
 } from 'discord.js';
 import { query, getSettings } from '../../db.js';
 import { colors } from '../../theme.js';
-import { getCategory } from './categories.js';
+import { STREAMER_LINK_LABEL, getCategory } from './categories.js';
+import { parseStreamLink, registerStreamer } from '../streams/index.js';
 import { PRIORITIES, buildPanel, buildTicketMessage, clip, pad, ratingRow } from './ui.js';
 import { fetchAllMessages, renderTranscript } from './transcript.js';
 
@@ -24,6 +25,7 @@ export async function handleTicketInteraction(interaction) {
     case 'setpriority': return setPriority(interaction);
     case 'note': return noteModal(interaction);
     case 'notemodal': return saveNote(interaction);
+    case 'approve': return approveStreamer(interaction);
     case 'close': return closeModal(interaction);
     case 'closemodal': return closeTicket(interaction);
     case 'rate': return rate(interaction, Number(args[0]), Number(args[1]));
@@ -215,6 +217,45 @@ async function saveNote(interaction) {
       .setDescription(content).addFields({ name: 'Autor', value: `<@${interaction.user.id}>`, inline: true }, { name: 'Ticket', value: `<#${ticket.channel_id}>`, inline: true })],
   });
   await interaction.reply({ content: 'Poznámka je uložená a vidí ji jen tým.', flags: EPHEMERAL });
+}
+
+/* ---------- Schválení žádosti o roli streamera ---------- */
+
+async function approveStreamer(interaction) {
+  const settings = await requireStaff(interaction);
+  if (!settings) return;
+  const ticket = await ticketInChannel(interaction.channelId);
+  if (!ticket || ticket.category !== 'streamer') {
+    return interaction.reply({ content: 'Toto tlačítko je jen pro žádosti o roli streamera.', flags: EPHEMERAL });
+  }
+  if (!settings.streamerRole) {
+    return interaction.reply({ content: 'Role streamera ještě není nastavená. Správce ji nastaví příkazem /nastaveni streamer.', flags: EPHEMERAL });
+  }
+  await interaction.deferReply({ flags: EPHEMERAL });
+  const member = await interaction.guild.members.fetch(ticket.user_id).catch(() => null);
+  if (!member) return interaction.editReply('Žadatel už na serveru není.');
+
+  try {
+    await member.roles.add(settings.streamerRole, `Schválil ${interaction.user.username}`);
+  } catch (err) {
+    if (err.code === 50013) return interaction.editReply('Bot nemá oprávnění tuto roli přidělit. Přetáhni v Nastavení serveru → Role roli bota nad roli streamera.');
+    throw err;
+  }
+
+  // Kanál z odpovědí ve formuláři rovnou přidáme do oznamování streamů.
+  const link = ticket.answers.find((a) => a.label === STREAMER_LINK_LABEL)?.value;
+  const parsed = parseStreamLink(link);
+  let streamNote = 'Odkaz na kanál jsem nerozpoznal, přidej ho ručně příkazem /stream pridat.';
+  if (parsed) {
+    const result = await registerStreamer(interaction.guildId, parsed.platform, parsed.login, ticket.user_id);
+    streamNote = result.ok ? `${result.text} Jeho streamy se teď budou oznamovat.` : `Kanál se nepodařilo přidat k oznamování: ${result.text}`;
+  }
+
+  await interaction.channel.send({
+    content: `<@${ticket.user_id}> tvoje žádost byla schválena, dostal(a) jsi roli streamera.`,
+    allowedMentions: { users: [ticket.user_id] },
+  });
+  await interaction.editReply(`Role streamera je přidělená.\n${streamNote}`);
 }
 
 /* ---------- Uzavření, transcript, hodnocení ---------- */
