@@ -55,6 +55,10 @@ export const data = new SlashCommandBuilder()
       .addChannelOption((o) => o.setName('kanal').setDescription('Kanál, kam se budou oznamovat streamy').addChannelTypes(ChannelType.GuildText).setRequired(true))
       .addRoleOption((o) => o.setName('role').setDescription('Role, která se označí při zahájení streamu (volitelné)')),
   )
+  .addSubcommand((s) =>
+    s.setName('streamer').setDescription('Nastaví roli streamera, kterou tým uděluje po schválení žádosti v ticketu')
+      .addRoleOption((o) => o.setName('role').setDescription('Role streamera (když nevyplníš, bot vytvoří roli Streamer)')),
+  )
   .addSubcommand((s) => s.setName('welcome-test').setDescription('Vyzkouší přivítání na tobě'));
 
 export async function execute(interaction) {
@@ -67,18 +71,27 @@ export async function execute(interaction) {
   if (sub === 'lounge') return setupLounge(interaction);
   if (sub === 'statistiky') return setupStats(interaction);
   if (sub === 'stream') return setupStream(interaction);
+  if (sub === 'streamer') return setupStreamerRole(interaction);
   if (sub === 'welcome-test') return testWelcome(interaction);
 }
 
 async function setupTickets(interaction) {
   const panel = interaction.options.getChannel('panel', true);
+  const previous = await getSettings(interaction.guildId);
+
+  // Starý panel (pokud ho bot zná) se smaže, aby v kanálu nezůstaly dva.
+  if (previous.ticketPanelChannel && previous.ticketPanelMessage) {
+    const oldChannel = await interaction.guild.channels.fetch(previous.ticketPanelChannel).catch(() => null);
+    await oldChannel?.messages.delete(previous.ticketPanelMessage).catch(() => {});
+  }
+  const message = await panel.send(buildPanel());
   await saveSettings(interaction.guildId, {
     ticketPanelChannel: panel.id,
+    ticketPanelMessage: message.id,
     ticketCategory: interaction.options.getChannel('kategorie', true).id,
     ticketLog: interaction.options.getChannel('log', true).id,
     staffRole: interaction.options.getRole('moderatori', true).id,
   });
-  await panel.send(buildPanel());
   await interaction.reply({ content: `Hotovo. Panel je v ${panel}.`, flags: EPHEMERAL });
 }
 
@@ -181,4 +194,21 @@ async function setupStream(interaction) {
   const role = interaction.options.getRole('role');
   await saveSettings(interaction.guildId, { streamChannel: channel.id, streamRole: role?.id ?? null });
   await interaction.reply({ content: `Hotovo. Streamy se budou oznamovat v ${channel}. Streamery přidáš příkazem /stream pridat.`, flags: EPHEMERAL });
+}
+
+async function setupStreamerRole(interaction) {
+  await interaction.deferReply({ flags: EPHEMERAL });
+  const guild = interaction.guild;
+  let role = interaction.options.getRole('role');
+  if (!role) {
+    await guild.roles.fetch();
+    role = guild.roles.cache.find((r) => r.name.toLowerCase() === 'streamer' && !r.managed)
+      ?? await guild.roles.create({ name: 'Streamer', reason: 'Role streamera' });
+  }
+  await saveSettings(interaction.guildId, { streamerRole: role.id });
+  const blocked = role.comparePositionTo(guild.members.me.roles.highest) >= 0;
+  await interaction.editReply(
+    `Hotovo. Roli streamera ${role} bude tým udělovat tlačítkem Schválit streamera v ticketu.` +
+    (blocked ? '\n\nPozor, role je nad rolí bota a nepůjde přidělit. Přetáhni v Nastavení serveru → Role roli bota výš.' : ''),
+  );
 }
