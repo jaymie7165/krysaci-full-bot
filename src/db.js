@@ -209,6 +209,25 @@ export async function initDb() {
       option_id TEXT NOT NULL,
       PRIMARY KEY (pulse_id, user_id, option_id)
     );
+    CREATE TABLE IF NOT EXISTS streamers (
+      id SERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      login TEXT NOT NULL,
+      platform_id TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      avatar_url TEXT,
+      discord_user_id TEXT,
+      is_live BOOLEAN NOT NULL DEFAULT false,
+      session_key TEXT,
+      channel_id TEXT,
+      message_id TEXT,
+      announced_at TIMESTAMPTZ,
+      started_at TIMESTAMPTZ,
+      last_title TEXT,
+      offline_polls INT NOT NULL DEFAULT 0,
+      UNIQUE (guild_id, platform, login)
+    );
     CREATE TABLE IF NOT EXISTS ticket_notes (
       id SERIAL PRIMARY KEY,
       ticket_id INT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,

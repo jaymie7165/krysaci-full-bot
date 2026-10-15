@@ -14,6 +14,8 @@ import { handleEventInteraction, startEventSweeper } from './features/events/ind
 import { handleTournamentInteraction } from './features/tournaments/index.js';
 import { cleanupLounges, handleLoungeInteraction, onVoiceStateUpdate } from './features/lounge/index.js';
 import { handlePulseInteraction, startPulseSweeper } from './features/pulse/index.js';
+import { startStreamPoller } from './features/streams/index.js';
+import { scheduleStatsUpdate, startStatsSweeper } from './features/stats/index.js';
 
 const client = new Client({
   // MessageContent je potřeba pro přepisy ticketů (zapni ho v Developer Portalu).
@@ -36,6 +38,8 @@ client.once(Events.ClientReady, async (c) => {
   startEventSweeper(c);
   cleanupLounges(c).catch(console.error);
   startPulseSweeper(c);
+  startStreamPoller(c);
+  startStatsSweeper(c);
   console.log(`Bot běží jako ${c.user.tag}`);
 });
 
@@ -66,7 +70,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.on(Events.VoiceStateUpdate, (oldState, newState) => onVoiceStateUpdate(oldState, newState).catch(console.error));
-client.on(Events.GuildMemberAdd, (member) => onMemberAdd(member).catch(console.error));
+client.on(Events.GuildMemberAdd, (member) => {
+  scheduleStatsUpdate(member.guild);
+  onMemberAdd(member).catch(console.error);
+});
+client.on(Events.GuildMemberRemove, (member) => scheduleStatsUpdate(member.guild));
 
 await initDb();
 await client.login(config.token);

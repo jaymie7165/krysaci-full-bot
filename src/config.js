@@ -15,4 +15,9 @@ export const config = {
   // Riot API je volitelné. Bez klíče se propojení LoL účtu a automatický rank vypnou.
   riotKey: process.env.RIOT_API_KEY || null,
   riotPlatform: (process.env.RIOT_PLATFORM || 'eun1').toLowerCase(),
+  // Oznamování streamů je volitelné, každá platforma má vlastní přístupové údaje.
+  twitchClientId: process.env.TWITCH_CLIENT_ID || null,
+  twitchClientSecret: process.env.TWITCH_CLIENT_SECRET || null,
+  kickClientId: process.env.KICK_CLIENT_ID || null,
+  kickClientSecret: process.env.KICK_CLIENT_SECRET || null,
 };
