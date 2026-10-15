@@ -3,6 +3,7 @@ import * as lfg from './lfg.js';
 import * as custom from './custom.js';
 import * as turnaj from './turnaj.js';
 import * as event from './event.js';
+import * as pulse from './pulse.js';
 
 export const commands = new Map([
   [nastaveni.data.name, nastaveni],
@@ -10,4 +11,5 @@ export const commands = new Map([
   [custom.data.name, custom],
   [turnaj.data.name, turnaj],
   [event.data.name, event],
+  [pulse.data.name, pulse],
 ]);
