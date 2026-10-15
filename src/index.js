@@ -13,6 +13,7 @@ import { handleSuggestionInteraction } from './features/community/suggestions.js
 import { handleEventInteraction, startEventSweeper } from './features/events/index.js';
 import { handleTournamentInteraction } from './features/tournaments/index.js';
 import { cleanupLounges, handleLoungeInteraction, onVoiceStateUpdate } from './features/lounge/index.js';
+import { handlePulseInteraction, startPulseSweeper } from './features/pulse/index.js';
 
 const client = new Client({
   // MessageContent je potřeba pro přepisy ticketů (zapni ho v Developer Portalu).
@@ -34,6 +35,7 @@ client.once(Events.ClientReady, async (c) => {
   startCustomSweeper(c);
   startEventSweeper(c);
   cleanupLounges(c).catch(console.error);
+  startPulseSweeper(c);
   console.log(`Bot běží jako ${c.user.tag}`);
 });
 
@@ -54,6 +56,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     else if (feature === 'event') await handleEventInteraction(interaction);
     else if (feature === 'tour') await handleTournamentInteraction(interaction);
     else if (feature === 'lounge') await handleLoungeInteraction(interaction);
+    else if (feature === 'pulse') await handlePulseInteraction(interaction);
   } catch (err) {
     console.error(err);
     const payload = { content: 'Něco se pokazilo. Zkus to prosím znovu, případně kontaktuj správce.', flags: MessageFlags.Ephemeral };

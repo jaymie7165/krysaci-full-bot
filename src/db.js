@@ -192,6 +192,23 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     ALTER TABLE riot_links ADD COLUMN IF NOT EXISTS platform TEXT;
+    CREATE TABLE IF NOT EXISTS pulses (
+      id SERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      message_id TEXT,
+      question TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      ends_at TIMESTAMPTZ NOT NULL,
+      created_by TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS pulse_votes (
+      pulse_id INT NOT NULL REFERENCES pulses(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      option_id TEXT NOT NULL,
+      PRIMARY KEY (pulse_id, user_id, option_id)
+    );
     CREATE TABLE IF NOT EXISTS ticket_notes (
       id SERIAL PRIMARY KEY,
       ticket_id INT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
