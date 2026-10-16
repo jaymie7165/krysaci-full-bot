@@ -7,6 +7,7 @@ import { welcomeMember } from '../features/welcome/index.js';
 import { buildLfgPanel } from '../features/lfg/ui.js';
 import { buildCommunityPanel } from '../features/community/index.js';
 import { createStatsChannels } from '../features/stats/index.js';
+import { BAR } from '../theme.js';
 
 const EPHEMERAL = MessageFlags.Ephemeral;
 
@@ -176,7 +177,7 @@ async function setupLounge(interaction) {
   const category = interaction.options.getChannel('kategorie', true);
   let entry = interaction.options.getChannel('vstup');
   if (!entry) {
-    entry = await interaction.guild.channels.create({ name: '〉➕| Vytvořit roomku', type: ChannelType.GuildVoice, parent: category.id });
+    entry = await interaction.guild.channels.create({ name: `〉➕${BAR} Vytvořit roomku`, type: ChannelType.GuildVoice, parent: category.id });
   }
   await saveSettings(interaction.guildId, { loungeCreator: entry.id, loungeCategory: category.id });
   await interaction.editReply(`Hotovo. Kdo vstoupí do ${entry}, dostane vlastní roomku v kategorii ${category}.`);
