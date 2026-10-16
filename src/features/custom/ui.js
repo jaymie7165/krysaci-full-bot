@@ -54,8 +54,9 @@ export function buildLobby(lobby, players) {
     if (lobby.status === 'finished') {
       container.addTextDisplayComponents(text(`**Vítěz:** ${lobby.winner === 'blue' ? '🔵 Blue Team' : '🔴 Red Team'}`));
     }
-    if (lobby.status === 'teams' && lobby.voice_blue) {
-      container.addTextDisplayComponents(text(`-# Voice: <#${lobby.voice_blue}> · <#${lobby.voice_red}>`));
+    const rooms = [lobby.voice_blue, lobby.voice_red].filter(Boolean);
+    if (lobby.status === 'teams' && rooms.length) {
+      container.addTextDisplayComponents(text(`-# Voice: ${rooms.map((id) => `<#${id}>`).join(' · ')}`));
     }
     if (lobby.status === 'cancelled') container.addTextDisplayComponents(text('-# Lobby bylo uzavřeno.'));
   }

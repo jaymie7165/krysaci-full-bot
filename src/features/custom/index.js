@@ -12,6 +12,13 @@ import { POSITIONS, STARTERS, buildLobby } from './ui.js';
 const EPHEMERAL = MessageFlags.Ephemeral;
 const MAX_PLAYERS = 20;
 const STALE_HOURS = 12;
+const EMPTY_AFTER_GAME_MIN = 2;   // hra skončila: prázdnou roomku mažeme po 2 minutách
+const EMPTY_DURING_GAME_MIN = 15; // hra běží: mažeme, až když jsou prázdné obě roomky 15 minut
+const ROOM_NAMES = ['〉🔵| Blue Side', '〉🔴| Red Side'];
+const ROOMS = [
+  { col: 'voice_blue', since: 'voice_blue_empty_since' },
+  { col: 'voice_red', since: 'voice_red_empty_since' },
+];
 
 const getLobby = async (id) => (await query('SELECT * FROM custom_lobbies WHERE id = $1', [id])).rows[0];
 const getPlayers = async (id) => (await query('SELECT * FROM custom_players WHERE lobby_id = $1 ORDER BY joined_at', [id])).rows;
@@ -250,7 +257,7 @@ async function applyTeams(client, guild, lobby, blue, red, settings) {
   const [voiceBlue, voiceRed] = await Promise.all([makeVoice('〉🔵| Blue Side', blue), makeVoice('〉🔴| Red Side', red)]);
 
   await query(
-    `UPDATE custom_lobbies SET status = 'teams', winner = NULL, voice_blue = $2, voice_red = $3, voice_empty_since = now() WHERE id = $1`,
+    `UPDATE custom_lobbies SET status = 'teams', winner = NULL, voice_blue = $2, voice_red = $3, voice_empty_since = NULL, voice_blue_empty_since = now(), voice_red_empty_since = now() WHERE id = $1`,
     [lobby.id, voiceBlue.id, voiceRed.id],
   );
   await moveToVoice(guild, blue, voiceBlue);
@@ -291,20 +298,43 @@ async function moveToVoice(guild, ids, channel) {
   return failed;
 }
 
-async function deleteVoices(client, lobby) {
-  for (const id of [lobby.voice_blue, lobby.voice_red]) {
-    if (!id) continue;
-    const channel = await client.channels.fetch(id).catch(() => null);
-    await channel?.delete('Custom hra').catch(() => {});
+// Načte roomku. Vrací { channel } nebo { gone: true }, když neexistuje (kód 10003). Jiné chyby (síť...) vyhazuje.
+async function fetchRoom(client, id) {
+  try {
+    return { channel: await client.channels.fetch(id) };
+  } catch (err) {
+    if (err.code === 10003) return { gone: true };
+    throw err;
   }
-  await query('UPDATE custom_lobbies SET voice_blue = NULL, voice_red = NULL, voice_empty_since = NULL WHERE id = $1', [lobby.id]);
+}
+
+// Smaže jednu roomku a až po úspěchu ji odebere z databáze. Při selhání ji necháme, ať se to zkusí znovu.
+async function deleteRoom(client, lobby, room, reason) {
+  const id = lobby[room.col];
+  if (!id) return true;
+  try {
+    const found = await fetchRoom(client, id);
+    if (found.channel) await found.channel.delete(reason);
+  } catch (err) {
+    if (err.code !== 10003) {
+      console.error(`Custom #${lobby.id}: roomku ${id} se nepodařilo smazat (${err.message}), zkusím to znovu.`);
+      return false;
+    }
+  }
+  await query(`UPDATE custom_lobbies SET ${room.col} = NULL, ${room.since} = NULL WHERE id = $1`, [lobby.id]);
+  lobby[room.col] = null;
+  return true;
+}
+
+async function deleteVoices(client, lobby) {
+  for (const room of ROOMS) await deleteRoom(client, lobby, room, 'Custom hra');
 }
 
 async function moveAgain(interaction, id) {
   if (!(await requireStaff(interaction))) return;
   await interaction.deferReply({ flags: EPHEMERAL });
   const lobby = await getLobby(id);
-  if (!lobby || lobby.status !== 'teams' || !lobby.voice_blue) return interaction.editReply('Voice roomky už neexistují.');
+  if (!lobby || lobby.status !== 'teams' || !lobby.voice_blue || !lobby.voice_red) return interaction.editReply('Voice roomky už neexistují. Použij Znovu rozdělit, bot vytvoří nové.');
   const players = await getPlayers(id);
   const [blueCh, redCh] = await Promise.all([lobby.voice_blue, lobby.voice_red].map((c) => interaction.client.channels.fetch(c).catch(() => null)));
   if (!blueCh || !redCh) return interaction.editReply('Voice roomky se nepodařilo najít.');
@@ -402,7 +432,7 @@ export async function showHistory(interaction) {
 
 /* ---------- Úklid na pozadí ---------- */
 
-async function sweep(client) {
+export async function sweepCustomLobbies(client) {
   // Lobby, které nikdo nedohrál, po 12 hodinách zavřít.
   const { rows: stale } = await query(
     `UPDATE custom_lobbies SET status = 'cancelled' WHERE status IN ('open', 'teams') AND created_at < now() - ($1 || ' hours')::interval RETURNING id`,
@@ -410,28 +440,86 @@ async function sweep(client) {
   );
   for (const l of stale) await refreshLobby(client, l.id).catch(console.error);
 
-  // Voice roomky smazat, když jsou prázdné: 2 min po konci hry, 30 min během hry.
+  // Voice roomky: během hry se mažou, až když jsou prázdné obě; po konci hry každá zvlášť.
   const { rows: lobbies } = await query('SELECT * FROM custom_lobbies WHERE voice_blue IS NOT NULL OR voice_red IS NOT NULL');
   for (const lobby of lobbies) {
     try {
-      const channels = (await Promise.all([lobby.voice_blue, lobby.voice_red].filter(Boolean).map((id) => client.channels.fetch(id).catch(() => null)))).filter(Boolean);
-      const occupied = channels.reduce((sum, c) => sum + c.members.size, 0);
-      if (occupied > 0) {
-        if (lobby.voice_empty_since) await query('UPDATE custom_lobbies SET voice_empty_since = NULL WHERE id = $1', [lobby.id]);
-        continue;
-      }
-      if (!lobby.voice_empty_since) {
-        await query('UPDATE custom_lobbies SET voice_empty_since = now() WHERE id = $1', [lobby.id]);
-        continue;
-      }
-      const limit = lobby.status === 'teams' ? 30 : 2;
-      if (Date.now() - new Date(lobby.voice_empty_since).getTime() > limit * 60_000) await deleteVoices(client, lobby);
-    } catch (err) { console.error(err); }
+      await sweepLobbyRooms(client, lobby);
+    } catch (err) { console.error(`Custom #${lobby.id}: úklid roomek selhal:`, err.message); }
+  }
+}
+
+async function sweepLobbyRooms(client, lobby) {
+  // Zjistíme stav obou roomek. Roomku, která už neexistuje, rovnou odebereme z databáze.
+  const rooms = [];
+  for (const room of ROOMS) {
+    const id = lobby[room.col];
+    if (!id) continue;
+    const found = await fetchRoom(client, id);
+    if (found.gone) {
+      await query(`UPDATE custom_lobbies SET ${room.col} = NULL, ${room.since} = NULL WHERE id = $1`, [lobby.id]);
+      lobby[room.col] = null;
+      continue;
+    }
+    rooms.push({ ...room, channel: found.channel, since: lobby[room.since], sinceCol: room.since });
+  }
+  if (!rooms.length) return;
+
+  const emptyFor = (r) => (r.since ? (Date.now() - new Date(r.since).getTime()) / 60_000 : null);
+  const mark = (r, value) => query(`UPDATE custom_lobbies SET ${r.sinceCol} = ${value ? 'now()' : 'NULL'} WHERE id = $1`, [lobby.id]);
+
+  // Hra běží: bereme obě roomky jako celek.
+  if (lobby.status === 'teams') {
+    const anyoneIn = rooms.some((r) => r.channel.members.size > 0);
+    if (anyoneIn) {
+      for (const r of rooms) if (r.since) await mark(r, false);
+      return;
+    }
+    for (const r of rooms) if (!r.since) await mark(r, true);
+    if (rooms.every((r) => (emptyFor(r) ?? 0) > EMPTY_DURING_GAME_MIN)) {
+      console.log(`Custom #${lobby.id}: roomky jsou ${EMPTY_DURING_GAME_MIN} minut prázdné, mažu je.`);
+      for (const r of rooms) await deleteRoom(client, lobby, ROOMS.find((x) => x.col === r.col), 'Custom hra: prázdná roomka');
+      await refreshLobby(client, lobby.id).catch(console.error);
+    }
+    return;
+  }
+
+  // Hra skončila nebo byla zrušena: každá prázdná roomka se maže sama za sebe.
+  for (const r of rooms) {
+    if (r.channel.members.size > 0) {
+      if (r.since) await mark(r, false);
+    } else if (!r.since) {
+      await mark(r, true);
+    } else if (emptyFor(r) > EMPTY_AFTER_GAME_MIN) {
+      console.log(`Custom #${lobby.id}: mažu prázdnou roomku ${r.channel.name}.`);
+      await deleteRoom(client, lobby, ROOMS.find((x) => x.col === r.col), 'Custom hra skončila');
+    }
   }
 }
 
 export function startCustomSweeper(client) {
-  const run = () => sweep(client).catch(console.error);
+  const run = () => sweepCustomLobbies(client).catch(console.error);
   run();
   setInterval(run, 60_000);
+}
+
+/* ---------- Ruční úklid zapomenutých roomek ---------- */
+
+// Smaže prázdné roomky Blue/Red Side, které nepatří žádné běžící hře (např. zbylé po dřívější chybě).
+export async function cleanupOrphans(interaction) {
+  if (!(await requireStaff(interaction))) return;
+  await interaction.deferReply({ flags: EPHEMERAL });
+  const { rows } = await query(`SELECT voice_blue, voice_red FROM custom_lobbies WHERE guild_id = $1 AND status = 'teams'`, [interaction.guildId]);
+  const active = new Set(rows.flatMap((r) => [r.voice_blue, r.voice_red]).filter(Boolean));
+  const channels = await interaction.guild.channels.fetch();
+  let removed = 0;
+  let occupied = 0;
+  for (const channel of channels.values()) {
+    if (!channel || !channel.isVoiceBased() || !ROOM_NAMES.includes(channel.name) || active.has(channel.id)) continue;
+    if (channel.members.size > 0) { occupied++; continue; }
+    await channel.delete('Ruční úklid zapomenutých custom roomek').then(() => removed++).catch((e) => console.error(e.message));
+  }
+  await interaction.editReply(
+    `Smazáno prázdných roomek: **${removed}**.` + (occupied ? `\nPřeskočil jsem ${occupied}, protože jsou obsazené.` : ''),
+  );
 }
