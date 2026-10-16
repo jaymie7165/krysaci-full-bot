@@ -3,6 +3,7 @@ import {
   StringSelectMenuBuilder,
 } from 'discord.js';
 import { getSettings, query } from '../../db.js';
+import { BAR } from '../../theme.js';
 import { RANKS } from '../roles/data.js';
 import { checkAchievements } from '../achievements/index.js';
 import { syncRank } from '../riot/index.js';
@@ -14,7 +15,10 @@ const MAX_PLAYERS = 20;
 const STALE_HOURS = 12;
 const EMPTY_AFTER_GAME_MIN = 2;   // hra skončila: prázdnou roomku mažeme po 2 minutách
 const EMPTY_DURING_GAME_MIN = 15; // hra běží: mažeme, až když jsou prázdné obě roomky 15 minut
-const ROOM_NAMES = ['〉🔵| Blue Side', '〉🔴| Red Side'];
+const BLUE_NAME = `〉🔵${BAR} Blue Side`;
+const RED_NAME = `〉🔴${BAR} Red Side`;
+// Pro ruční úklid rozpoznáváme i starší názvy s klasickou svislou čarou.
+const ROOM_NAMES = [BLUE_NAME, RED_NAME, '〉🔵| Blue Side', '〉🔴| Red Side'];
 const ROOMS = [
   { col: 'voice_blue', since: 'voice_blue_empty_since' },
   { col: 'voice_red', since: 'voice_red_empty_since' },
@@ -254,7 +258,7 @@ async function applyTeams(client, guild, lobby, blue, red, settings) {
       { id: client.user.id, allow: [P.ViewChannel, P.Connect, P.ManageChannels, P.MoveMembers, P.SendMessages, P.ReadMessageHistory] },
     ],
   });
-  const [voiceBlue, voiceRed] = await Promise.all([makeVoice('〉🔵| Blue Side', blue), makeVoice('〉🔴| Red Side', red)]);
+  const [voiceBlue, voiceRed] = await Promise.all([makeVoice(BLUE_NAME, blue), makeVoice(RED_NAME, red)]);
 
   await query(
     `UPDATE custom_lobbies SET status = 'teams', winner = NULL, voice_blue = $2, voice_red = $3, voice_empty_since = NULL, voice_blue_empty_since = now(), voice_red_empty_since = now() WHERE id = $1`,
