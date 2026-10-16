@@ -9,6 +9,8 @@ import { buildPost } from './ui.js';
 
 const EPHEMERAL = MessageFlags.Ephemeral;
 const EXPIRE_HOURS = 24;
+const MAX_CAPACITY = 99; // stejný strop jako limit míst ve voice kanálu na Discordu
+const MENTIONS_PER_MESSAGE = 60;
 const VOICE_EMPTY_MINUTES = 5;
 const postUrl = (p) => `https://discord.com/channels/${p.guild_id}/${p.channel_id}/${p.message_id}`;
 
@@ -66,7 +68,7 @@ async function showModal(interaction) {
   const modal = new ModalBuilder().setCustomId(`lfg:create:${gameId}`).setTitle(other ? 'Hledání spoluhráčů' : game.name.slice(0, 45));
   if (other) modal.addComponents(input('name', 'Název hry nebo aktivity', { placeholder: 'Např. Minecraft nebo koukání na film' }));
   modal.addComponents(
-    input('capacity', 'Kolik hráčů celkem (včetně tebe)?', { placeholder: 'Např. 5' }),
+    input('capacity', 'Kolik hráčů celkem (včetně tebe)?', { placeholder: `Např. 5 (nejvíc ${MAX_CAPACITY})` }),
     input('mode', 'Režim', { required: false, placeholder: 'Např. Competitive, casual' }),
   );
   if (!other) {
@@ -89,8 +91,8 @@ async function createPost(interaction, gameId) {
   const other = gameId === 'other';
   const gameName = other ? f('name') : gameById(gameId).name;
   const capacity = Number.parseInt(f('capacity'), 10);
-  if (!Number.isInteger(capacity) || capacity < 2 || capacity > 10) {
-    return interaction.editReply('Počet hráčů musí být číslo od 2 do 10. Zkus to prosím znovu.');
+  if (!Number.isInteger(capacity) || capacity < 2 || capacity > MAX_CAPACITY) {
+    return interaction.editReply(`Počet hráčů musí být číslo od 2 do ${MAX_CAPACITY}. Zkus to prosím znovu.`);
   }
 
   const { rows: existing } = await query(
@@ -158,11 +160,17 @@ async function join(interaction, id) {
     full.voice_channel_id = voice.id;
     await interaction.message.edit(buildPost(full, members));
   }
+  // Při velkých partách se pingy rozdělí do více zpráv, protože jedna zpráva má limit na délku.
   const ids = members.map((m) => m.user_id);
-  await interaction.message.reply({
-    content: `Parta je kompletní! ${ids.map((u) => `<@${u}>`).join(' ')}${voice ? `\nSejdeme se ve voice: ${voice}` : ''}`,
-    allowedMentions: { users: ids },
-  });
+  const groups = Array.from({ length: Math.ceil(ids.length / MENTIONS_PER_MESSAGE) }, (_, i) => ids.slice(i * MENTIONS_PER_MESSAGE, (i + 1) * MENTIONS_PER_MESSAGE));
+  for (const [i, group] of groups.entries()) {
+    const payload = {
+      content: `${i === 0 ? 'Parta je kompletní! ' : ''}${group.map((u) => `<@${u}>`).join(' ')}${i === 0 && voice ? `\nSejdeme se ve voice: ${voice}` : ''}`,
+      allowedMentions: { users: group },
+    };
+    if (i === 0) await interaction.message.reply(payload);
+    else await interaction.channel.send(payload);
+  }
 }
 
 async function createVoice(guild, post) {
@@ -192,8 +200,18 @@ async function players(interaction, id) {
   const post = await getPost(id);
   if (!post) return inactive(interaction);
   const members = await getMembers(id);
-  const list = members.map((m, i) => `${i + 1}. <@${m.user_id}>${m.user_id === post.founder_id ? ' (zakladatel)' : ''}`).join('\n');
-  await interaction.reply({ content: `**Hráči v partě (${members.length}/${post.capacity})**\n${list}`, flags: EPHEMERAL });
+  const header = `**Hráči v partě (${members.length}/${post.capacity})**\n`;
+  const lines = members.map((m, i) => `${i + 1}. <@${m.user_id}>${m.user_id === post.founder_id ? ' (zakladatel)' : ''}`);
+  // Zpráva smí mít max. 2000 znaků, u velkých part zbytek zkrátíme.
+  let body = '';
+  let shown = 0;
+  for (const line of lines) {
+    if (header.length + body.length + line.length + 40 > 2000) break;
+    body += `${line}\n`;
+    shown++;
+  }
+  const rest = lines.length - shown;
+  await interaction.reply({ content: `${header}${body}${rest > 0 ? `…a dalších ${rest}` : ''}`.trimEnd(), flags: EPHEMERAL });
 }
 
 async function close(interaction, id) {

@@ -13,7 +13,14 @@ export const hraci = (n) => (n === 1 ? '1 hráče' : n >= 2 && n <= 4 ? `${n} hr
 
 const STATUS_COLORS = { open: colors.accent, full: colors.success, closed: colors.neutral, expired: colors.neutral };
 
-const bar = (n, max) => '▰'.repeat(Math.min(n, max)) + '▱'.repeat(Math.max(max - n, 0));
+// Ukazatel má nejvýš 12 dílků, aby se u velkých part nezalamoval; u malých odpovídá počtu míst.
+const bar = (n, max) => {
+  const segments = Math.min(max, 12);
+  let filled = Math.round((n / max) * segments);
+  if (n > 0 && filled === 0) filled = 1;
+  if (n < max && filled === segments) filled = segments - 1;
+  return '▰'.repeat(filled) + '▱'.repeat(segments - filled);
+};
 
 export function buildPost(post, members, { ping } = {}) {
   const count = members.length;
@@ -34,7 +41,8 @@ export function buildPost(post, members, { ping } = {}) {
   ].filter(([, v]) => v).map(([k, v]) => `-# ${k}\n${v}`);
 
   if (post.status !== 'open') {
-    details.push(`-# Hráči\n${members.map((m) => `<@${m.user_id}>`).join(', ')}`);
+    const shown = members.slice(0, 40).map((m) => `<@${m.user_id}>`).join(', ');
+    details.push(`-# Hráči\n${shown}${members.length > 40 ? ` a dalších ${members.length - 40}` : ''}`);
   }
   if (post.status === 'full' && post.voice_channel_id) details.push(`-# Voice\n<#${post.voice_channel_id}>`);
 
