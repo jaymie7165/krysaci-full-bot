@@ -6,3 +6,6 @@ export const colors = {
   warning: 0xe8b15d,
   danger: 0xe5666e,
 };
+
+// Oddělovač v názvech vytvářených kanálů (U+FE31). Změníš ho tady a projeví se všude.
+export const BAR = '︱';
