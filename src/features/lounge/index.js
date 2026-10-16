@@ -3,9 +3,9 @@ import {
   PermissionFlagsBits as P, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder, TextInputBuilder, TextInputStyle,
 } from 'discord.js';
 import { getSettings, query } from '../../db.js';
-import { colors } from '../../theme.js';
+import { BAR, colors } from '../../theme.js';
 
-const PREFIX = '〉🎧| ';
+const PREFIX = `〉🎧${BAR} `;
 const EPHEMERAL = MessageFlags.Ephemeral;
 const humans = (channel) => channel.members.filter((m) => !m.user.bot);
 
