@@ -1,9 +1,10 @@
 import { ChannelType, PermissionFlagsBits as P } from 'discord.js';
 import { getSettings } from '../../db.js';
+import { BAR } from '../../theme.js';
 
-// Názvy kanálů podle návrhu: 〉💂| Members: 152 a 〉🤖| Bots: 1
-export const memberName = (n) => `〉💂| Members: ${n}`;
-export const botName = (n) => `〉🤖| Bots: ${n}`;
+// Názvy kanálů podle návrhu: 〉💂︱ Members: 152 a 〉🤖︱ Bots: 1
+export const memberName = (n) => `〉💂${BAR} Members: ${n}`;
+export const botName = (n) => `〉🤖${BAR} Bots: ${n}`;
 
 const fetched = new Set();
 const timers = new Map();
