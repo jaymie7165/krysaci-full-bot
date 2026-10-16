@@ -192,6 +192,8 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     ALTER TABLE riot_links ADD COLUMN IF NOT EXISTS platform TEXT;
+    ALTER TABLE custom_lobbies ADD COLUMN IF NOT EXISTS voice_blue_empty_since TIMESTAMPTZ;
+    ALTER TABLE custom_lobbies ADD COLUMN IF NOT EXISTS voice_red_empty_since TIMESTAMPTZ;
     CREATE TABLE IF NOT EXISTS pulses (
       id SERIAL PRIMARY KEY,
       guild_id TEXT NOT NULL,
