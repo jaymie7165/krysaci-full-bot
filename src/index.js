@@ -16,6 +16,7 @@ import { cleanupLounges, handleLoungeInteraction, onVoiceStateUpdate } from './f
 import { handlePulseInteraction, startPulseSweeper } from './features/pulse/index.js';
 import { startStreamPoller } from './features/streams/index.js';
 import { scheduleStatsUpdate, startStatsSweeper } from './features/stats/index.js';
+import { assignBaseRole } from './features/baserole/index.js';
 
 const client = new Client({
   // MessageContent je potřeba pro přepisy ticketů (zapni ho v Developer Portalu).
@@ -72,6 +73,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 client.on(Events.VoiceStateUpdate, (oldState, newState) => onVoiceStateUpdate(oldState, newState).catch(console.error));
 client.on(Events.GuildMemberAdd, (member) => {
   scheduleStatsUpdate(member.guild);
+  assignBaseRole(member).catch(console.error);
   onMemberAdd(member).catch(console.error);
 });
 client.on(Events.GuildMemberRemove, (member) => scheduleStatsUpdate(member.guild));
