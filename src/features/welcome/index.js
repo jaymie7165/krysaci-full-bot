@@ -18,7 +18,7 @@ async function sendChannelWelcome(member, settings) {
   const container = new ContainerBuilder().setAccentColor(colors.accent).addSectionComponents(
     new SectionBuilder()
       .addTextDisplayComponents(
-        text(`### Vítej, ${name}!\nJsi ${member.guild.memberCount}. člen naší komunity. Ať se ti tu líbí.${where}`),
+        text(`### 👋 Vítej, ${name}!\nJsi ${member.guild.memberCount}. člen naší komunity. Ať se ti tu líbí.${where}`),
       )
       .setThumbnailAccessory(new ThumbnailBuilder().setURL(member.user.displayAvatarURL({ size: 128 }))),
   );
@@ -31,15 +31,15 @@ async function sendDm(member, settings) {
   const container = new ContainerBuilder()
     .setAccentColor(colors.accent)
     .addTextDisplayComponents(
-      text(`### Vítej na serveru ${escapeMarkdown(guild.name)}\nRádi tě tu máme. Tady je krátký průvodce, ať se hned zorientuješ.`),
+      text(`### 👋 Vítej na serveru ${escapeMarkdown(guild.name)}\nRádi tě tu máme. Tady je krátký průvodce, ať se hned zorientuješ.`),
     )
     .addSeparatorComponents(divider())
     .addTextDisplayComponents(
       text(
-        '**1. Vyber si role**\nV kanálu pro role zvolíš hry, které hraješ, věkovou kategorii a rank. Díky tomu tě ostatní snadno najdou.\n\n' +
-        '**2. Seznam se s ostatními**\nNapiš pár slov do chatu, nebo se přidej do voice kanálu. Nikdo tu nekouše.\n\n' +
-        '**3. Potřebuješ pomoc?**\nV kanálu Support otevřeš ticket a náš tým se ti ozve.\n\n' +
-        '**Pravidla**\nChovej se k ostatním s respektem, to je celé.',
+        '**🧩 1. Vyber si role**\nV kanálu pro role zvolíš hry, které hraješ, věkovou kategorii a rank. Díky tomu tě ostatní snadno najdou.\n\n' +
+        '**💬 2. Seznam se s ostatními**\nNapiš pár slov do chatu, nebo se přidej do voice kanálu. Nikdo tu nekouše.\n\n' +
+        '**🎫 3. Potřebuješ pomoc?**\nV kanálu Support otevřeš ticket a náš tým se ti ozve.\n\n' +
+        '**📜 Pravidla**\nChovej se k ostatním s respektem, to je celé.',
       ),
     );
 
