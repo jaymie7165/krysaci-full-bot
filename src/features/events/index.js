@@ -25,7 +25,7 @@ export function buildEvent(ev, signups, { ping } = {}) {
   const names = going.map((s) => `<@${s.user_id}>`).join(', ');
   const list = names.length > 1200 ? `${going.length} hráčů` : names || '—';
   const info = [
-    `**Přihlášení** · ${going.length}${ev.capacity ? `/${ev.capacity}` : ''}`,
+    `👥 **Přihlášení** · ${going.length}${ev.capacity ? `/${ev.capacity}` : ''}`,
     list,
     ...(waiting.length ? [`-# Čekací listina: ${waiting.length}`] : []),
   ].join('\n');
@@ -33,7 +33,7 @@ export function buildEvent(ev, signups, { ping } = {}) {
   const stateNote = { open: '', done: '\n-# Event proběhl.', cancelled: '\n-# Event byl zrušen.' }[ev.status];
   const container = new ContainerBuilder()
     .setAccentColor(accent)
-    .addTextDisplayComponents(text(`### ${ev.title}\n<t:${ts}:F> · <t:${ts}:R>${stateNote}`));
+    .addTextDisplayComponents(text(`### 📅 ${ev.title}\n🕗 <t:${ts}:F> · <t:${ts}:R>${stateNote}`));
   if (ev.description) container.addTextDisplayComponents(text(ev.description));
   container.addSeparatorComponents(divider()).addTextDisplayComponents(text(info));
 
