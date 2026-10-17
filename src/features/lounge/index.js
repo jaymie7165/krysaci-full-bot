@@ -17,7 +17,7 @@ export function buildLoungePanel(lounge) {
   const container = new ContainerBuilder()
     .setAccentColor(colors.accent)
     .addTextDisplayComponents(text(
-      '### Tvoje roomka\nSprávce může roomku přejmenovat, nastavit limit míst nebo ji zamknout. ' +
+      '### 🎧 Tvoje roomka\nSprávce může roomku přejmenovat, nastavit limit míst nebo ji zamknout. ' +
       'Když odejde, správcem se stane někdo další, kdo tu zůstane. Prázdná roomka se sama smaže.',
     ))
     .addSeparatorComponents(divider())
