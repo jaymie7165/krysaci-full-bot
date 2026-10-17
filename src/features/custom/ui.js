@@ -24,7 +24,7 @@ export function buildLobby(lobby, players) {
   const id = lobby.id;
   const modeLabel = lobby.mode === 'aram' ? 'ARAM' : '5v5';
   const header =
-    `### League of Legends — Custom Game\n-# Organizátor: <@${lobby.organizer_id}> · Režim: ${modeLabel} · Lobby #${id}` +
+    `### ⚔️ League of Legends — Custom Game\n-# Organizátor: <@${lobby.organizer_id}> · Režim: ${modeLabel} · Lobby #${id}` +
     (lobby.note ? `\n${lobby.note}` : '');
 
   const accent = { open: colors.accent, teams: colors.accent, finished: colors.success, cancelled: colors.neutral }[lobby.status];
@@ -40,19 +40,19 @@ export function buildLobby(lobby, players) {
     const subs = players.slice(STARTERS);
     const slots = Array.from({ length: STARTERS }, (_, i) => (starters[i] ? line(starters[i], i) : `-# ${i + 1}. Volné místo`));
     container
-      .addTextDisplayComponents(text(`**Přihlášení hráči** · ${starters.length} z ${STARTERS}\n${bar(starters.length, STARTERS)}`))
+      .addTextDisplayComponents(text(`👥 **Přihlášení hráči** · ${starters.length} z ${STARTERS}\n${bar(starters.length, STARTERS)}`))
       .addTextDisplayComponents(text(slots.join('\n')));
     if (subs.length) {
-      container.addTextDisplayComponents(text(`**Náhradníci**\n${subs.map((p, i) => line(p, i)).join('\n')}`));
+      container.addTextDisplayComponents(text(`🪑 **Náhradníci**\n${subs.map((p, i) => line(p, i)).join('\n')}`));
     }
   } else {
     container
       .addTextDisplayComponents(text(teamBlock('Blue Team', '🔵', 'blue')))
       .addTextDisplayComponents(text(teamBlock('Red Team', '🔴', 'red')));
     const subs = players.filter((p) => !p.team);
-    if (subs.length) container.addTextDisplayComponents(text(`**Náhradníci**\n${subs.map((p, i) => line(p, i)).join('\n')}`));
+    if (subs.length) container.addTextDisplayComponents(text(`🪑 **Náhradníci**\n${subs.map((p, i) => line(p, i)).join('\n')}`));
     if (lobby.status === 'finished') {
-      container.addTextDisplayComponents(text(`**Vítěz:** ${lobby.winner === 'blue' ? '🔵 Blue Team' : '🔴 Red Team'}`));
+      container.addTextDisplayComponents(text(`🏆 **Vítěz:** ${lobby.winner === 'blue' ? '🔵 Blue Team' : '🔴 Red Team'}`));
     }
     const rooms = [lobby.voice_blue, lobby.voice_red].filter(Boolean);
     if (lobby.status === 'teams' && rooms.length) {
