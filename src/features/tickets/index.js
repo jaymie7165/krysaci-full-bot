@@ -6,17 +6,17 @@ import { query, getSettings } from '../../db.js';
 import { colors } from '../../theme.js';
 import { STREAMER_LINK_LABEL, getCategory } from './categories.js';
 import { parseStreamLink, registerStreamer } from '../streams/index.js';
-import { PRIORITIES, buildPanel, buildTicketMessage, clip, pad, ratingRow } from './ui.js';
+import { MAX_OPEN_PER_USER, PRIORITIES, buildPanel, buildTicketMessage, clip, pad, panelIcon, ratingRow } from './ui.js';
 import { fetchAllMessages, renderTranscript } from './transcript.js';
 
-const MAX_OPEN_PER_USER = 3;
 const EPHEMERAL = MessageFlags.Ephemeral;
 const MEMBER_PERMS = [P.ViewChannel, P.SendMessages, P.ReadMessageHistory, P.AttachFiles, P.EmbedLinks];
 
 export async function handleTicketInteraction(interaction) {
   const [, action, ...args] = interaction.customId.split(':');
   switch (action) {
-    case 'open': return showCategoryModal(interaction);
+    case 'start': return showCategoryModal(interaction, args[0]);
+    case 'open': return showCategoryModal(interaction, interaction.values[0], { upgradePanel: true });
     case 'create': return openTicket(interaction, args[0]);
     case 'claim': return claim(interaction);
     case 'add': return addMemberMenu(interaction);
@@ -60,8 +60,9 @@ async function refreshPanel(channel, ticket) {
 
 /* ---------- Vytvoření ticketu ---------- */
 
-async function showCategoryModal(interaction) {
-  const category = getCategory(interaction.values[0]);
+async function showCategoryModal(interaction, categoryId, { upgradePanel = false } = {}) {
+  const category = getCategory(categoryId);
+  if (!category) return interaction.reply({ content: 'Tuto kategorii už neznám. Použij prosím aktuální panel.', flags: EPHEMERAL });
   const modal = new ModalBuilder().setCustomId(`ticket:create:${category.id}`).setTitle(category.label.slice(0, 45));
   for (const f of category.fields) {
     const input = new TextInputBuilder()
@@ -74,8 +75,10 @@ async function showCategoryModal(interaction) {
     modal.addComponents(new ActionRowBuilder().addComponents(input));
   }
   await interaction.showModal(modal);
-  // Vrátí výběrové menu do výchozího stavu, aby šla stejná kategorie vybrat znovu.
-  interaction.message.edit(buildPanel()).catch(() => {});
+  // Starý panel s výběrovým menu se při prvním použití sám změní na nový s tlačítky.
+  if (upgradePanel) {
+    interaction.message.edit(buildPanel({ iconUrl: panelIcon(interaction.guild, interaction.client) })).catch(() => {});
+  }
 }
 
 async function openTicket(interaction, categoryId) {
@@ -99,8 +102,8 @@ async function openTicket(interaction, categoryId) {
     value: interaction.fields.getTextInputValue(f.id).trim(),
   }));
   const { rows: [ticket] } = await query(
-    `INSERT INTO tickets (guild_id, user_id, category, answers) VALUES ($1, $2, $3, $4) RETURNING *`,
-    [interaction.guildId, interaction.user.id, category.id, JSON.stringify(answers)],
+    `INSERT INTO tickets (guild_id, user_id, category, answers, opener_avatar) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [interaction.guildId, interaction.user.id, category.id, JSON.stringify(answers), interaction.user.displayAvatarURL({ size: 128 })],
   );
 
   try {
