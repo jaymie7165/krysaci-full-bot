@@ -11,10 +11,10 @@ const divider = () => new SeparatorBuilder().setDivider(true).setSpacing(Separat
 const EPHEMERAL = MessageFlags.Ephemeral;
 
 const STATUS = {
-  open: { label: 'Čeká na posouzení', color: colors.accent },
-  approved: { label: 'Schváleno', color: colors.success },
-  rejected: { label: 'Zamítnuto', color: colors.danger },
-  done: { label: 'Realizováno', color: colors.success },
+  open: { label: '🕗 Čeká na posouzení', color: colors.accent },
+  approved: { label: '✅ Schváleno', color: colors.success },
+  rejected: { label: '❌ Zamítnuto', color: colors.danger },
+  done: { label: '🎉 Realizováno', color: colors.success },
 };
 
 async function votes(id) {
@@ -28,7 +28,7 @@ export async function buildSuggestion(s) {
   const st = STATUS[s.status];
   const container = new ContainerBuilder()
     .setAccentColor(st.color)
-    .addTextDisplayComponents(text(`### Návrh #${s.id} · ${s.title}\n-# Od <@${s.author_id}> · ${st.label}`))
+    .addTextDisplayComponents(text(`### 💡 Návrh #${s.id} · ${s.title}\n-# Od <@${s.author_id}> · ${st.label}`))
     .addSeparatorComponents(divider())
     .addTextDisplayComponents(text(s.body));
 
