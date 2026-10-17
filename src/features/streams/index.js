@@ -33,7 +33,7 @@ export function buildStreamCard(streamer, live, { ping } = {}) {
 
   if (live) {
     const head = text(
-      `### ${streamer.display_name} právě streamuje\n**${live.title || 'Bez názvu'}**\n` +
+      `### 🔴 ${streamer.display_name} právě streamuje\n**${live.title || 'Bez názvu'}**\n` +
       `${live.game ? `${live.game} · ` : ''}${live.viewers} diváků\n-# ${p.name}`,
     );
     container.setAccentColor(p.color);
@@ -48,7 +48,7 @@ export function buildStreamCard(streamer, live, { ping } = {}) {
       .addActionRowComponents(new ActionRowBuilder().addComponents(link(p.watch, live.url)));
   } else {
     container.setAccentColor(colors.neutral).addTextDisplayComponents(text(
-      `### ${streamer.display_name} už nestreamuje\n${streamer.last_title ? `**${streamer.last_title}**\n` : ''}` +
+      `### ⚫ ${streamer.display_name} už nestreamuje\n${streamer.last_title ? `**${streamer.last_title}**\n` : ''}` +
       `-# ${p.name}${streamer.started_at ? ` · stream trval ${duration(streamer.started_at)}` : ''}`,
     ));
     container.addSeparatorComponents(divider())
