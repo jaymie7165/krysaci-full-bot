@@ -127,7 +127,7 @@ async function setupRoles(interaction) {
   }
 
   await saveSettings(guild.id, { roleMap: map, rolesChannel: channel.id });
-  await channel.send(buildRolesPanel());
+  await replacePanel(interaction, 'roles', channel, buildRolesPanel({ iconUrl: panelIcon(guild, interaction.client) }));
 
   // Bot nemůže přidělovat role, které jsou v hierarchii nad ním.
   const top = guild.members.me.roles.highest;
@@ -163,7 +163,7 @@ async function setupLfg(interaction) {
   const channel = interaction.options.getChannel('kanal', true);
   const category = interaction.options.getChannel('kategorie');
   await saveSettings(interaction.guildId, { lfgChannel: channel.id, lfgCategory: category?.id ?? null });
-  await channel.send(buildLfgPanel());
+  await replacePanel(interaction, 'lfg', channel, buildLfgPanel({ iconUrl: panelIcon(interaction.guild, interaction.client) }));
   await interaction.reply({ content: `Hotovo. Panel pro hledání spoluhráčů je v ${channel}. Příkaz /lfg funguje kdekoli.`, flags: EPHEMERAL });
 }
 
@@ -175,7 +175,7 @@ async function setupCommunity(interaction) {
     suggestionChannel: suggestions.id,
     achievementChannel: achievements?.id ?? null,
   });
-  await panel.send(buildCommunityPanel());
+  await replacePanel(interaction, 'community', panel, buildCommunityPanel({ iconUrl: panelIcon(interaction.guild, interaction.client) }));
   await interaction.reply({ content: `Hotovo. Panel Komunita je v ${panel}, nápady se budou posílat do ${suggestions}.`, flags: EPHEMERAL });
 }
 
@@ -253,4 +253,17 @@ async function setupBaseRole(interaction) {
       await edit('Přidělování se přerušilo kvůli chybě. Spusť příkaz znovu, kdo roli už má, bude přeskočen.');
     }
   }
+}
+
+// Smaže dříve zveřejněný panel (pokud ho bot zná) a pošle nový, ať se v kanálech nehromadí duplicity.
+async function replacePanel(interaction, key, channel, payload) {
+  const panels = (await getSettings(interaction.guildId)).panels ?? {};
+  const old = panels[key];
+  if (old) {
+    const oldChannel = await interaction.guild.channels.fetch(old.channel).catch(() => null);
+    await oldChannel?.messages.delete(old.message).catch(() => {});
+  }
+  const message = await channel.send(payload);
+  await saveSettings(interaction.guildId, { panels: { ...panels, [key]: { channel: channel.id, message: message.id } } });
+  return message;
 }
