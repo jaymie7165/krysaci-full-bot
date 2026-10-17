@@ -1,6 +1,6 @@
 import { ChannelType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { getSettings, saveSettings } from '../db.js';
-import { buildPanel } from '../features/tickets/ui.js';
+import { buildPanel, panelIcon } from '../features/tickets/ui.js';
 import { buildRolesPanel } from '../features/roles/ui.js';
 import { allRoleDefs } from '../features/roles/data.js';
 import { welcomeMember } from '../features/welcome/index.js';
@@ -92,7 +92,7 @@ async function setupTickets(interaction) {
     const oldChannel = await interaction.guild.channels.fetch(previous.ticketPanelChannel).catch(() => null);
     await oldChannel?.messages.delete(previous.ticketPanelMessage).catch(() => {});
   }
-  const message = await panel.send(buildPanel());
+  const message = await panel.send(buildPanel({ iconUrl: panelIcon(interaction.guild, interaction.client) }));
   await saveSettings(interaction.guildId, {
     ticketPanelChannel: panel.id,
     ticketPanelMessage: message.id,
