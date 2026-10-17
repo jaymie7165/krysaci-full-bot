@@ -4,6 +4,7 @@ import {
 } from 'discord.js';
 import { colors } from '../../theme.js';
 import { RANKS } from '../roles/data.js';
+import { addFooter, addHeader, addRow, asMessage, button, newPanel } from '../../ui.js';
 
 const text = (c) => new TextDisplayBuilder().setContent(c);
 const divider = () => new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small);
@@ -34,20 +35,20 @@ export function buildPost(post, members, { ping } = {}) {
 
   const rankLabel = RANKS[post.game_id] ? 'Rank' : 'Obtížnost';
   const details = [
-    ['Režim', post.mode_text],
-    [rankLabel, post.rank_text],
-    ['Čas', post.time_text],
-    ['Atmosféra', post.vibe_text],
-  ].filter(([, v]) => v).map(([k, v]) => `-# ${k}\n${v}`);
+    ['🎯 Režim', post.mode_text],
+    [`🏅 ${rankLabel}`, post.rank_text],
+    ['🕗 Čas', post.time_text],
+    ['💬 Atmosféra', post.vibe_text],
+  ].filter(([, v]) => v).map(([k, v]) => `**${k}**  ${v}`);
 
   if (post.status !== 'open') {
     const shown = members.slice(0, 40).map((m) => `<@${m.user_id}>`).join(', ');
-    details.push(`-# Hráči\n${shown}${members.length > 40 ? ` a dalších ${members.length - 40}` : ''}`);
+    details.push(`👥 **Hráči**  ${shown}${members.length > 40 ? ` a dalších ${members.length - 40}` : ''}`);
   }
-  if (post.status === 'full' && post.voice_channel_id) details.push(`-# Voice\n<#${post.voice_channel_id}>`);
+  if (post.status === 'full' && post.voice_channel_id) details.push(`🔊 **Voice**  <#${post.voice_channel_id}>`);
 
   const head = text(
-    `### ${post.game_name}\n${subtitles[post.status]}\n${bar(count, post.capacity)}\n-# Zakladatel: <@${post.founder_id}>`,
+    `### 🎮 ${post.game_name}\n${subtitles[post.status]}\n${bar(count, post.capacity)}\n-# Zakladatel: <@${post.founder_id}>`,
   );
 
   const container = new ContainerBuilder().setAccentColor(STATUS_COLORS[post.status] ?? colors.accent);
@@ -77,20 +78,18 @@ export function buildPost(post, members, { ping } = {}) {
   return { components, flags: MessageFlags.IsComponentsV2 };
 }
 
-export function buildLfgPanel() {
-  const container = new ContainerBuilder()
-    .setAccentColor(colors.accent)
-    .addTextDisplayComponents(
-      text(
-        '## Hledání spoluhráčů\nHledáš někoho do party? Klikni na tlačítko, vyplň pár údajů a bot ti vytvoří příspěvek. ' +
-        'Až se parta naplní, dostane vlastní voice roomku.\n-# Příspěvek vyprší po 24 hodinách. Najednou můžeš mít jedno aktivní hledání.',
-      ),
-    )
-    .addSeparatorComponents(divider())
-    .addActionRowComponents(
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('lfg:new').setLabel('Založit hledání').setStyle(ButtonStyle.Primary),
-      ),
-    );
-  return { components: [container], flags: MessageFlags.IsComponentsV2 };
+export function buildLfgPanel({ iconUrl } = {}) {
+  const container = newPanel();
+  addHeader(
+    container,
+    '## 🎮 Hledání spoluhráčů\nChceš hrát a nemáš s kým? Založ hledání, bot dá vědět těm, kdo danou hru hrají, a když se parta naplní, postaví jí voice roomku.',
+    iconUrl,
+  );
+  container.addSeparatorComponents(divider());
+  addRow(container, {
+    emoji: '🔎', label: 'Založit hledání', description: 'Vyber hru, napiš kolik lidí hledáš a kdy chceš hrát.',
+    button: button('lfg:new', 'Založit hledání', ButtonStyle.Primary),
+  });
+  addFooter(container, 'Hledání po 24 hodinách samo vyprší. Najednou můžeš mít jedno aktivní. Funguje i příkaz /lfg.');
+  return asMessage(container);
 }
