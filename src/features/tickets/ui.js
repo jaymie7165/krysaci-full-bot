@@ -23,7 +23,7 @@ const GROUPS = [
 ];
 
 // Obrázek v rohu panelu: ikona serveru, jinak avatar bota.
-export const panelIcon = (guild, client) => guild?.iconURL({ size: 256 }) ?? client.user.displayAvatarURL({ size: 256 });
+export { panelIcon } from '../../ui.js';
 
 // Veřejný panel "Support Center": každá kategorie je řádek s vlastním tlačítkem.
 export function buildPanel({ iconUrl } = {}) {
