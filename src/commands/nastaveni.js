@@ -8,6 +8,7 @@ import { buildLfgPanel } from '../features/lfg/ui.js';
 import { buildCommunityPanel } from '../features/community/index.js';
 import { createStatsChannels } from '../features/stats/index.js';
 import { BAR } from '../theme.js';
+import { backfillBaseRole, canAssign, ensureRole, parseColor } from '../features/baserole/index.js';
 
 const EPHEMERAL = MessageFlags.Ephemeral;
 
@@ -60,6 +61,11 @@ export const data = new SlashCommandBuilder()
     s.setName('streamer').setDescription('Nastaví roli streamera, kterou tým uděluje po schválení žádosti v ticketu')
       .addRoleOption((o) => o.setName('role').setDescription('Role streamera (když nevyplníš, bot vytvoří roli Streamer)')),
   )
+  .addSubcommand((s) =>
+    s.setName('mys').setDescription('Vytvoří roli Myš a přidělí ji všem členům i každému novému')
+      .addRoleOption((o) => o.setName('role').setDescription('Použít existující roli místo vytvoření nové'))
+      .addStringOption((o) => o.setName('barva').setDescription('Barva nové role ve tvaru #E8A5B9').setMaxLength(7)),
+  )
   .addSubcommand((s) => s.setName('welcome-test').setDescription('Vyzkouší přivítání na tobě'));
 
 export async function execute(interaction) {
@@ -73,6 +79,7 @@ export async function execute(interaction) {
   if (sub === 'statistiky') return setupStats(interaction);
   if (sub === 'stream') return setupStream(interaction);
   if (sub === 'streamer') return setupStreamerRole(interaction);
+  if (sub === 'mys') return setupBaseRole(interaction);
   if (sub === 'welcome-test') return testWelcome(interaction);
 }
 
@@ -212,4 +219,38 @@ async function setupStreamerRole(interaction) {
     `Hotovo. Roli streamera ${role} bude tým udělovat tlačítkem Schválit streamera v ticketu.` +
     (blocked ? '\n\nPozor, role je nad rolí bota a nepůjde přidělit. Přetáhni v Nastavení serveru → Role roli bota výš.' : ''),
   );
+}
+
+async function setupBaseRole(interaction) {
+  await interaction.deferReply({ flags: EPHEMERAL });
+  const guild = interaction.guild;
+  const colorInput = interaction.options.getString('barva');
+  const color = colorInput ? parseColor(colorInput) : null;
+  if (colorInput && color === null) return interaction.editReply('Barvu zadej ve tvaru #E8A5B9.');
+
+  const { role, created } = await ensureRole(guild, { role: interaction.options.getRole('role'), color });
+  if (!canAssign(guild, role)) {
+    return interaction.editReply(
+      `Roli ${role} bot nemůže přidělovat, je nad jeho rolí. Přetáhni v Nastavení serveru → Role roli bota **nad** ni a spusť příkaz znovu.`,
+    );
+  }
+  await saveSettings(interaction.guildId, { baseRole: role.id });
+  const edit = (text) => interaction.editReply(text).catch(() => {});
+  await edit(`Role ${role} je ${created ? 'vytvořená' : 'nastavená'}. Přiděluju ji členům, může to trvat pár minut. Noví členové ji budou dostávat automaticky.`);
+
+  try {
+    const r = await backfillBaseRole(guild, role.id, (p) => edit(`Přiděluju roli ${role}: ${p.done} z ${p.total}`));
+    await edit(
+      `Hotovo. Roli ${role} jsem přidělil **${r.added}** členům, **${r.had}** ji už mělo.` +
+      (r.failed ? `\nNepodařilo se u **${r.failed}** členů (pravděpodobně už odešli).` : '') +
+      `\nBoti ji nedostávají. Noví členové ji dostanou sami.`,
+    );
+  } catch (err) {
+    if (err.message === 'missing-permissions') {
+      await edit(`Bot nemá oprávnění tuto roli přidělit. Zkontroluj, že má oprávnění Spravovat role a že je jeho role nad rolí ${role}.`);
+    } else {
+      console.error(err);
+      await edit('Přidělování se přerušilo kvůli chybě. Spusť příkaz znovu, kdo roli už má, bude přeskočen.');
+    }
+  }
 }
