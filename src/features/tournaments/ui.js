@@ -18,13 +18,13 @@ const btn = (id, label, style = ButtonStyle.Secondary) => new ButtonBuilder().se
 export function buildTournament(t, players, teams, { ping } = {}) {
   const accent = { signup: colors.accent, running: colors.accent, finished: colors.success, cancelled: colors.neutral }[t.status];
   const container = new ContainerBuilder().setAccentColor(accent)
-    .addTextDisplayComponents(text(`### ${t.name}\n-# ${FORMATS[t.format]} · Organizátor: <@${t.created_by}>`))
+    .addTextDisplayComponents(text(`### 🏆 ${t.name}\n-# ${FORMATS[t.format]} · Organizátor: <@${t.created_by}>`))
     .addSeparatorComponents(divider());
 
   if (t.status === 'signup') {
     const names = players.map((p) => `<@${p.user_id}>`).join(', ');
     container.addTextDisplayComponents(text(
-      `**Přihlášení hráči** · ${players.length}/${t.max_players}\n${clip(names, 1500) || '—'}\n\n` +
+      `👥 **Přihlášení hráči** · ${players.length}/${t.max_players}\n${clip(names, 1500) || '—'}\n\n` +
       `-# Týmy po ${TEAM_SIZE} hráčích se vylosují vyváženě podle ranku (propojený LoL účet, jinak rank role). Minimum je ${MIN_PLAYERS} hráčů.`,
     ));
   } else {
@@ -38,7 +38,7 @@ export function buildTournament(t, players, teams, { ping } = {}) {
     if (subs.length) container.addTextDisplayComponents(text(`-# Náhradníci: ${subs.map((p) => `<@${p.user_id}>`).join(', ')}`));
     if (t.status === 'finished') {
       const winner = teams.find((x) => x.id === t.winner_team);
-      container.addTextDisplayComponents(text(`**Vítěz:** ${winner?.name ?? '—'}`));
+      container.addTextDisplayComponents(text(`🏆 **Vítěz:** ${winner?.name ?? '—'}`));
     }
     if (t.status === 'cancelled') container.addTextDisplayComponents(text('-# Turnaj byl zrušen.'));
   }
@@ -68,7 +68,7 @@ export function buildBracket(t, teams, matches) {
 
   if (t.format === 'pavouk') {
     const rounds = Math.max(...matches.map((m) => m.round));
-    container.addTextDisplayComponents(text(`### Pavouk · ${t.name}`)).addSeparatorComponents(divider());
+    container.addTextDisplayComponents(text(`### 🏆 Pavouk · ${t.name}`)).addSeparatorComponents(divider());
     for (let r = 1; r <= rounds; r++) {
       const lines = matches.filter((m) => m.round === r).sort((x, y) => x.idx - y.idx).map((m) => matchLine(m, name));
       container.addTextDisplayComponents(text(`**${roundName(r, rounds)}**\n${lines.join('\n')}`));
@@ -80,9 +80,9 @@ export function buildBracket(t, teams, matches) {
       .map((x, i) => `${i + 1}. **${x.name}** · ${wins.get(x.id)} výher`);
     const open = matches.filter((m) => !m.winner).sort((x, y) => x.round - y.round || x.idx - y.idx);
     const upcoming = open.slice(0, 8).map((m) => `Kolo ${m.round} · ${name(m.team_a)} vs ${name(m.team_b)}`);
-    container.addTextDisplayComponents(text(`### Tabulka · ${t.name}`)).addSeparatorComponents(divider())
+    container.addTextDisplayComponents(text(`### 📊 Tabulka · ${t.name}`)).addSeparatorComponents(divider())
       .addTextDisplayComponents(text(clip(table.join('\n'), 1800)))
-      .addTextDisplayComponents(text(`**Nadcházející zápasy** · odehráno ${matches.length - open.length} z ${matches.length}\n${upcoming.join('\n') || '—'}`));
+      .addTextDisplayComponents(text(`📅 **Nadcházející zápasy** · odehráno ${matches.length - open.length} z ${matches.length}\n${upcoming.join('\n') || '—'}`));
   }
   return { components: [container], flags: MessageFlags.IsComponentsV2 };
 }
