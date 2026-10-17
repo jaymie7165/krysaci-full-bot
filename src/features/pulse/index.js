@@ -35,7 +35,7 @@ export async function buildPulse(pulse) {
   const container = new ContainerBuilder()
     .setAccentColor(open ? colors.accent : colors.success)
     .addTextDisplayComponents(text(
-      `### ${pulse.question}\n-# ${open ? `Hlasování končí <t:${unix(pulse.ends_at)}:R>` : 'Hlasování skončilo'} · ${voted(voters)}` +
+      `### 🗳️ ${pulse.question}\n-# ${open ? `Hlasování končí <t:${unix(pulse.ends_at)}:R>` : 'Hlasování skončilo'} · ${voted(voters)}` +
       (open ? ` · každý může vybrat až ${MAX_VOTES} hry` : ''),
     ))
     .addSeparatorComponents(divider())
@@ -43,7 +43,7 @@ export async function buildPulse(pulse) {
 
   if (!open && top > 0) {
     const winners = counts.filter((c) => c.n === top).map((c) => c.name);
-    container.addTextDisplayComponents(text(`**Vítěz:** ${winners.join(', ')}`));
+    container.addTextDisplayComponents(text(`🏆 **Vítěz:** ${winners.join(', ')}`));
   }
   if (open) {
     const menu = new StringSelectMenuBuilder()
