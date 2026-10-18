@@ -66,6 +66,10 @@ export const data = new SlashCommandBuilder()
       .addRoleOption((o) => o.setName('role').setDescription('Použít existující roli místo vytvoření nové'))
       .addStringOption((o) => o.setName('barva').setDescription('Barva nové role ve tvaru #E8A5B9').setMaxLength(7)),
   )
+  .addSubcommand((s) =>
+    s.setName('modlog').setDescription('Nastaví kanál, kam se zapisují všechny zásahy moderátorů')
+      .addChannelOption((o) => o.setName('kanal').setDescription('Privátní kanál pro tým').addChannelTypes(ChannelType.GuildText).setRequired(true)),
+  )
   .addSubcommand((s) => s.setName('welcome-test').setDescription('Vyzkouší přivítání na tobě'));
 
 export async function execute(interaction) {
@@ -80,6 +84,7 @@ export async function execute(interaction) {
   if (sub === 'stream') return setupStream(interaction);
   if (sub === 'streamer') return setupStreamerRole(interaction);
   if (sub === 'mys') return setupBaseRole(interaction);
+  if (sub === 'modlog') return setupModLog(interaction);
   if (sub === 'welcome-test') return testWelcome(interaction);
 }
 
@@ -266,4 +271,10 @@ async function replacePanel(interaction, key, channel, payload) {
   const message = await channel.send(payload);
   await saveSettings(interaction.guildId, { panels: { ...panels, [key]: { channel: channel.id, message: message.id } } });
   return message;
+}
+
+async function setupModLog(interaction) {
+  const channel = interaction.options.getChannel('kanal', true);
+  await saveSettings(interaction.guildId, { modLog: channel.id });
+  await interaction.reply({ content: `Hotovo. Zásahy moderátorů se budou zapisovat do ${channel}.`, flags: EPHEMERAL });
 }
