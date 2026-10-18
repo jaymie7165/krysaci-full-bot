@@ -17,6 +17,7 @@ import { handlePulseInteraction, startPulseSweeper } from './features/pulse/inde
 import { startStreamPoller } from './features/streams/index.js';
 import { scheduleStatsUpdate, startStatsSweeper } from './features/stats/index.js';
 import { assignBaseRole } from './features/baserole/index.js';
+import { handleModInteraction } from './features/moderation/index.js';
 
 const client = new Client({
   // MessageContent je potřeba pro přepisy ticketů (zapni ho v Developer Portalu).
@@ -46,7 +47,7 @@ client.once(Events.ClientReady, async (c) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
-    if (interaction.isChatInputCommand()) {
+    if (interaction.isChatInputCommand() || interaction.isUserContextMenuCommand()) {
       await commands.get(interaction.commandName)?.execute(interaction);
       return;
     }
@@ -60,6 +61,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     else if (feature === 'sug') await handleSuggestionInteraction(interaction);
     else if (feature === 'event') await handleEventInteraction(interaction);
     else if (feature === 'tour') await handleTournamentInteraction(interaction);
+    else if (feature === 'mod') await handleModInteraction(interaction);
     else if (feature === 'lounge') await handleLoungeInteraction(interaction);
     else if (feature === 'pulse') await handlePulseInteraction(interaction);
   } catch (err) {

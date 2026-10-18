@@ -193,6 +193,10 @@ export async function initDb() {
     );
     ALTER TABLE riot_links ADD COLUMN IF NOT EXISTS platform TEXT;
     ALTER TABLE tickets ADD COLUMN IF NOT EXISTS opener_avatar TEXT;
+    ALTER TABLE custom_lobbies ADD COLUMN IF NOT EXISTS draft_blue TEXT;
+    ALTER TABLE custom_lobbies ADD COLUMN IF NOT EXISTS draft_red TEXT;
+    ALTER TABLE custom_lobbies ADD COLUMN IF NOT EXISTS draft_order TEXT;
+    ALTER TABLE custom_lobbies ADD COLUMN IF NOT EXISTS draft_turn INT NOT NULL DEFAULT 0;
     ALTER TABLE custom_lobbies ADD COLUMN IF NOT EXISTS voice_blue_empty_since TIMESTAMPTZ;
     ALTER TABLE custom_lobbies ADD COLUMN IF NOT EXISTS voice_red_empty_since TIMESTAMPTZ;
     CREATE TABLE IF NOT EXISTS pulses (
@@ -230,6 +234,55 @@ export async function initDb() {
       last_title TEXT,
       offline_polls INT NOT NULL DEFAULT 0,
       UNIQUE (guild_id, platform, login)
+    );
+    CREATE TABLE IF NOT EXISTS mod_actions (
+      id SERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      moderator_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      reason TEXT NOT NULL DEFAULT '',
+      rule TEXT NOT NULL DEFAULT '',
+      duration_min INT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS mod_actions_user ON mod_actions (guild_id, user_id);
+    CREATE TABLE IF NOT EXISTS member_cards (
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      style TEXT,
+      times TEXT[] NOT NULL DEFAULT '{}',
+      open_to TEXT,
+      about TEXT NOT NULL DEFAULT '',
+      channel_id TEXT,
+      message_id TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (guild_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS card_hellos (
+      guild_id TEXT NOT NULL,
+      from_id TEXT NOT NULL,
+      to_id TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (guild_id, from_id, to_id)
+    );
+    CREATE TABLE IF NOT EXISTS hrajeme (
+      id SERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      message_id TEXT,
+      creator_id TEXT NOT NULL,
+      game_id TEXT NOT NULL,
+      game_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      lfg_post_id INT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS hrajeme_votes (
+      hrajeme_id INT NOT NULL REFERENCES hrajeme(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      vote TEXT NOT NULL,
+      PRIMARY KEY (hrajeme_id, user_id)
     );
     CREATE TABLE IF NOT EXISTS ticket_notes (
       id SERIAL PRIMARY KEY,
