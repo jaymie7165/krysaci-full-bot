@@ -1,18 +1,19 @@
 // Seznam her, ranků a věkových kategorií. Chceš něco přidat nebo změnit? Uprav jen tento soubor
 // a spusť znovu /nastaveni role (chybějící role se doplní).
+// size = výchozí velikost party pro „Hrajeme?“ (kolik lidí hra obvykle potřebuje), uprav podle potřeby.
 export const GAMES = [
-  { id: 'lol', name: 'League of Legends', short: 'LoL' },
-  { id: 'valorant', name: 'Valorant', short: 'Valorant' },
-  { id: 'cs2', name: 'CS2', short: 'CS2' },
-  { id: 'dbd', name: 'Dead by Daylight' },
-  { id: 'f13', name: 'Friday the 13th' },
-  { id: 'phasmophobia', name: 'Phasmophobia' },
-  { id: 'ggd', name: 'Goose Goose Duck' },
-  { id: 'feign', name: 'Feign' },
-  { id: 'peak', name: 'Peak' },
-  { id: 'lethal', name: 'Lethal Company' },
-  { id: 'golf', name: 'Golf With Your Friends' },
-  { id: 'tavernia', name: 'Tavernia' },
+  { id: 'lol', name: 'League of Legends', short: 'LoL', size: 5 },
+  { id: 'valorant', name: 'Valorant', short: 'Valorant', size: 5 },
+  { id: 'cs2', name: 'CS2', short: 'CS2', size: 5 },
+  { id: 'dbd', name: 'Dead by Daylight', size: 5 },
+  { id: 'f13', name: 'Friday the 13th', size: 8 },
+  { id: 'phasmophobia', name: 'Phasmophobia', size: 4 },
+  { id: 'ggd', name: 'Goose Goose Duck', size: 8 },
+  { id: 'feign', name: 'Feign', size: 6 },
+  { id: 'peak', name: 'Peak', size: 4 },
+  { id: 'lethal', name: 'Lethal Company', size: 4 },
+  { id: 'golf', name: 'Golf With Your Friends', size: 4 },
+  { id: 'tavernia', name: 'Tavernia', size: 4 },
 ];
 
 // Hry, u kterých jde zvolit rank. Klíč je id hry z GAMES.
