@@ -5,10 +5,13 @@ import {
 import { getSettings, query } from '../../db.js';
 import { GAMES, RANKS, gameById } from '../roles/data.js';
 import { checkAchievements } from '../achievements/index.js';
+import { BAR } from '../../theme.js';
 import { buildPost } from './ui.js';
 
 const EPHEMERAL = MessageFlags.Ephemeral;
 const EXPIRE_HOURS = 24;
+const CHAT_ID = 'chat'; // hledání bez hry a bez limitu lidí (capacity = 0)
+const CHAT_NAME = 'Jen pokecat a poznat nové lidi';
 const MAX_CAPACITY = 99; // stejný strop jako limit míst ve voice kanálu na Discordu
 const MENTIONS_PER_MESSAGE = 60;
 const VOICE_EMPTY_MINUTES = 5;
@@ -47,12 +50,13 @@ export async function startLfg(interaction) {
   }
   const menu = new StringSelectMenuBuilder()
     .setCustomId('lfg:game')
-    .setPlaceholder('Vyber hru…')
+    .setPlaceholder('Vyber hru nebo pokec…')
     .addOptions([
+      { label: '💬 Jen pokecat a poznat nové lidi', description: 'Bez hry a bez limitu lidí', value: CHAT_ID },
       ...GAMES.map((g) => ({ label: g.name, value: g.id })),
       { label: 'Jiná hra nebo aktivita', value: 'other' },
     ]);
-  await interaction.reply({ content: 'Na jakou hru hledáš spoluhráče?', components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
+  await interaction.reply({ content: 'Co hledáš? Spoluhráče na hru, nebo si jen chceš pokecat a poznat někoho nového?', components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
 }
 
 const input = (id, label, { style = TextInputStyle.Short, required = true, placeholder } = {}) => {
@@ -63,6 +67,15 @@ const input = (id, label, { style = TextInputStyle.Short, required = true, place
 
 async function showModal(interaction) {
   const gameId = interaction.values[0];
+  if (gameId === CHAT_ID) {
+    return interaction.showModal(
+      new ModalBuilder().setCustomId(`lfg:create:${CHAT_ID}`).setTitle('Pokec a seznámení').addComponents(
+        input('topic', 'O čem by ses rád bavil?', { required: false, placeholder: 'Např. hry, filmy, cokoli. Nemusíš nic psát.' }),
+        input('time', 'Kdy máš čas?', { required: false, placeholder: 'Např. dnes večer (prázdné = kdykoli)' }),
+        input('vibe', 'Něco o sobě (volitelné)', { required: false, placeholder: 'Např. jsem tu nový a hledám lidi na pokec' }),
+      ),
+    );
+  }
   const other = gameId === 'other';
   const game = other ? null : gameById(gameId);
   const modal = new ModalBuilder().setCustomId(`lfg:create:${gameId}`).setTitle(other ? 'Hledání spoluhráčů' : game.name.slice(0, 45));
@@ -88,11 +101,15 @@ async function createPost(interaction, gameId) {
   if (!channel) return interaction.editReply('LFG kanál se nepodařilo najít. Napiš prosím správci serveru.');
 
   const f = (id) => interaction.fields.getTextInputValue(id).trim();
+  const chat = gameId === CHAT_ID;
   const other = gameId === 'other';
-  const gameName = other ? f('name') : gameById(gameId).name;
-  const capacity = Number.parseInt(f('capacity'), 10);
-  if (!Number.isInteger(capacity) || capacity < 2 || capacity > MAX_CAPACITY) {
-    return interaction.editReply(`Počet hráčů musí být číslo od 2 do ${MAX_CAPACITY}. Zkus to prosím znovu.`);
+  const gameName = chat ? CHAT_NAME : other ? f('name') : gameById(gameId).name;
+  let capacity = 0; // 0 = bez limitu
+  if (!chat) {
+    capacity = Number.parseInt(f('capacity'), 10);
+    if (!Number.isInteger(capacity) || capacity < 2 || capacity > MAX_CAPACITY) {
+      return interaction.editReply(`Počet hráčů musí být číslo od 2 do ${MAX_CAPACITY}. Zkus to prosím znovu.`);
+    }
   }
 
   const { rows: existing } = await query(
@@ -106,14 +123,14 @@ async function createPost(interaction, gameId) {
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
     [
       interaction.guildId, channel.id, interaction.user.id, gameId, gameName, capacity,
-      f('mode'), other ? '' : f('rank'), f('time') || 'Co nejdřív', f('vibe'),
+      chat ? f('topic') : f('mode'), other || chat ? '' : f('rank'), f('time') || (chat ? 'Kdykoli' : 'Co nejdřív'), f('vibe'),
       interaction.member.displayAvatarURL({ size: 128 }),
     ],
   );
   await query('INSERT INTO lfg_members (post_id, user_id) VALUES ($1, $2)', [post.id, interaction.user.id]);
 
   try {
-    const roleId = other ? null : settings.roleMap?.[`game:${gameId}`];
+    const roleId = other || chat ? null : settings.roleMap?.[`game:${gameId}`];
     const members = await getMembers(post.id);
     const message = await channel.send({
       ...buildPost(post, members, { ping: roleId ? `<@&${roleId}>` : undefined }),
@@ -141,6 +158,28 @@ async function join(interaction, id) {
 
   checkAchievements(interaction.client, interaction.guildId, interaction.user.id);
   let members = await getMembers(id);
+
+  // Pokec bez limitu: nikdy není plno. Voice roomka vznikne, jakmile jsou aspoň dva lidé.
+  if (post.capacity === 0) {
+    let voice = null;
+    if (members.length >= 2 && !post.voice_channel_id) {
+      voice = await createVoice(interaction.guild, post).catch((e) => { console.error(e); return null; });
+      if (voice) {
+        await query('UPDATE lfg_posts SET voice_channel_id = $1, voice_empty_since = now() WHERE id = $2', [voice.id, id]);
+        post.voice_channel_id = voice.id;
+      }
+    }
+    await interaction.update(buildPost(post, members));
+    if (voice) {
+      const who = [...new Set([post.founder_id, interaction.user.id])];
+      await interaction.channel.send({
+        content: `Pokec může začít! ${who.map((u) => `<@${u}>`).join(' ')}\nSejdete se ve voice: ${voice}`,
+        allowedMentions: { users: who },
+      });
+    }
+    return;
+  }
+
   if (members.length > post.capacity) {
     await query('DELETE FROM lfg_members WHERE post_id = $1 AND user_id = $2', [id, interaction.user.id]);
     return interaction.reply({ content: 'Parta je mezitím plná.', flags: EPHEMERAL });
@@ -177,11 +216,11 @@ async function createVoice(guild, post) {
   const settings = await getSettings(guild.id);
   const lfgChannel = await guild.channels.fetch(settings.lfgChannel).catch(() => null);
   return guild.channels.create({
-    name: `LFG · ${post.game_name.slice(0, 60)} #${post.id}`,
+    name: post.capacity === 0 ? `〉💬${BAR} Pokec #${post.id}` : `LFG · ${post.game_name.slice(0, 60)} #${post.id}`,
     type: ChannelType.GuildVoice,
     parent: settings.lfgCategory ?? lfgChannel?.parentId ?? null,
     userLimit: post.capacity,
-    reason: 'LFG parta je kompletní',
+    reason: post.capacity === 0 ? 'LFG pokec: přidal se druhý člověk' : 'LFG parta je kompletní',
   });
 }
 
@@ -200,7 +239,7 @@ async function players(interaction, id) {
   const post = await getPost(id);
   if (!post) return inactive(interaction);
   const members = await getMembers(id);
-  const header = `**Hráči v partě (${members.length}/${post.capacity})**\n`;
+  const header = `**Hráči v partě (${post.capacity ? `${members.length}/${post.capacity}` : members.length})**\n`;
   const lines = members.map((m, i) => `${i + 1}. <@${m.user_id}>${m.user_id === post.founder_id ? ' (zakladatel)' : ''}`);
   // Zpráva smí mít max. 2000 znaků, u velkých part zbytek zkrátíme.
   let body = '';
@@ -230,6 +269,13 @@ async function close(interaction, id) {
 
 /* ---------- Úklid na pozadí (vypršení a mazání voice) ---------- */
 
+// Obnoví kartu příspěvku (např. po smazání voice roomky, aby neukazovala odkaz na zrušený kanál).
+async function refreshPost(client, post) {
+  const channel = await client.channels.fetch(post.channel_id).catch(() => null);
+  const message = await channel?.messages.fetch(post.message_id).catch(() => null);
+  await message?.edit(buildPost(post, await getMembers(post.id))).catch(() => {});
+}
+
 async function sweep(client) {
   // Příspěvky starší než 24 hodin vyprší.
   const { rows: expired } = await query(
@@ -251,6 +297,7 @@ async function sweep(client) {
       const channel = await client.channels.fetch(post.voice_channel_id).catch(() => null);
       if (!channel) {
         await query('UPDATE lfg_posts SET voice_channel_id = NULL WHERE id = $1', [post.id]);
+        await refreshPost(client, { ...post, voice_channel_id: null });
         continue;
       }
       if (channel.members.size > 0) {
@@ -262,6 +309,7 @@ async function sweep(client) {
       } else if (Date.now() - new Date(post.voice_empty_since).getTime() > VOICE_EMPTY_MINUTES * 60_000) {
         await channel.delete('LFG voice roomka je prázdná');
         await query('UPDATE lfg_posts SET voice_channel_id = NULL, voice_empty_since = NULL WHERE id = $1', [post.id]);
+        await refreshPost(client, { ...post, voice_channel_id: null, voice_empty_since: null });
       }
     } catch (err) { console.error(err); }
   }

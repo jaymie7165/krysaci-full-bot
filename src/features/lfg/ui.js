@@ -10,6 +10,7 @@ const text = (c) => new TextDisplayBuilder().setContent(c);
 const divider = () => new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small);
 
 // Správný tvar pro čeština: 1 hráče, 2-4 hráče, 5+ hráčů
+const lidi = (n) => (n === 1 ? '1 člověk' : n >= 2 && n <= 4 ? `${n} lidé` : `${n} lidí`);
 export const hraci = (n) => (n === 1 ? '1 hráče' : n >= 2 && n <= 4 ? `${n} hráče` : `${n} hráčů`);
 
 const STATUS_COLORS = { open: colors.accent, full: colors.success, closed: colors.neutral, expired: colors.neutral };
@@ -25,8 +26,14 @@ const bar = (n, max) => {
 
 export function buildPost(post, members, { ping } = {}) {
   const count = members.length;
+  const unlimited = post.capacity === 0; // pokec bez hry a bez limitu lidí
   const missing = Math.max(post.capacity - count, 0);
-  const subtitles = {
+  const subtitles = unlimited ? {
+    open: `**Kdokoli se může přidat** · ${lidi(count)}`,
+    full: `**Pokec běží** · ${lidi(count)}`,
+    closed: `**Pokec ukončen** · ${lidi(count)}`,
+    expired: `**Pokec vypršel** · ${lidi(count)}`,
+  } : {
     open: `**Hledáme ${hraci(missing)}** · ${count}/${post.capacity}`,
     full: `**Parta je kompletní** · ${count}/${post.capacity}`,
     closed: `**Hledání ukončeno** · ${count}/${post.capacity}`,
@@ -35,20 +42,24 @@ export function buildPost(post, members, { ping } = {}) {
 
   const rankLabel = RANKS[post.game_id] ? 'Rank' : 'Obtížnost';
   const details = [
-    ['🎯 Režim', post.mode_text],
+    [unlimited ? '💬 Téma' : '🎯 Režim', post.mode_text],
     [`🏅 ${rankLabel}`, post.rank_text],
     ['🕗 Čas', post.time_text],
-    ['💬 Atmosféra', post.vibe_text],
+    [unlimited ? '🙋 O zakladateli' : '💬 Atmosféra', post.vibe_text],
   ].filter(([, v]) => v).map(([k, v]) => `**${k}**  ${v}`);
 
   if (post.status !== 'open') {
     const shown = members.slice(0, 40).map((m) => `<@${m.user_id}>`).join(', ');
     details.push(`👥 **Hráči**  ${shown}${members.length > 40 ? ` a dalších ${members.length - 40}` : ''}`);
   }
-  if (post.status === 'full' && post.voice_channel_id) details.push(`🔊 **Voice**  <#${post.voice_channel_id}>`);
+  if (unlimited && post.status === 'open' && members.length) {
+    const who = members.slice(0, 10).map((m) => `<@${m.user_id}>`).join(', ');
+    details.push(`👥 **Kdo je tu**  ${who}${members.length > 10 ? ` a dalších ${members.length - 10}` : ''}`);
+  }
+  if (post.voice_channel_id && (post.status === 'full' || (unlimited && post.status === 'open'))) details.push(`🔊 **Voice**  <#${post.voice_channel_id}>`);
 
   const head = text(
-    `### 🎮 ${post.game_name}\n${subtitles[post.status]}\n${bar(count, post.capacity)}\n-# Zakladatel: <@${post.founder_id}>`,
+    `### ${unlimited ? '💬' : '🎮'} ${post.game_name}\n${subtitles[post.status]}\n${unlimited ? '' : `${bar(count, post.capacity)}\n`}-# Zakladatel: <@${post.founder_id}>`,
   );
 
   const container = new ContainerBuilder().setAccentColor(STATUS_COLORS[post.status] ?? colors.accent);
@@ -82,12 +93,12 @@ export function buildLfgPanel({ iconUrl } = {}) {
   const container = newPanel();
   addHeader(
     container,
-    '## 🎮 Hledání spoluhráčů\nChceš hrát a nemáš s kým? Založ hledání, bot dá vědět těm, kdo danou hru hrají, a když se parta naplní, postaví jí voice roomku.',
+    '## 🎮 Hledání spoluhráčů\nChceš hrát a nemáš s kým? Založ hledání, bot dá vědět těm, kdo danou hru hrají, a když se parta naplní, postaví jí voice roomku. Nechceš hrát, jen si pokecat a poznat někoho nového? I na to tu je volba.',
     iconUrl,
   );
   container.addSeparatorComponents(divider());
   addRow(container, {
-    emoji: '🔎', label: 'Založit hledání', description: 'Vyber hru, napiš kolik lidí hledáš a kdy chceš hrát.',
+    emoji: '🔎', label: 'Založit hledání', description: 'Vyber hru a napiš, kolik lidí hledáš. Nebo zvol pokec bez hry a bez limitu.',
     button: button('lfg:new', 'Založit hledání', ButtonStyle.Primary),
   });
   addFooter(container, 'Hledání po 24 hodinách samo vyprší. Najednou můžeš mít jedno aktivní. Funguje i příkaz /lfg.');
