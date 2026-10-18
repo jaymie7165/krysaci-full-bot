@@ -6,6 +6,7 @@ import { query, getSettings } from '../../db.js';
 import { colors } from '../../theme.js';
 import { STREAMER_LINK_LABEL, getCategory } from './categories.js';
 import { parseStreamLink, registerStreamer } from '../streams/index.js';
+import { historyText } from '../moderation/index.js';
 import { MAX_OPEN_PER_USER, PRIORITIES, buildPanel, buildTicketMessage, clip, pad, panelIcon, ratingRow } from './ui.js';
 import { fetchAllMessages, renderTranscript } from './transcript.js';
 
@@ -26,6 +27,7 @@ export async function handleTicketInteraction(interaction) {
     case 'note': return noteModal(interaction);
     case 'notemodal': return saveNote(interaction);
     case 'approve': return approveStreamer(interaction);
+    case 'history': return appealHistory(interaction);
     case 'close': return closeModal(interaction);
     case 'closemodal': return closeTicket(interaction);
     case 'rate': return rate(interaction, Number(args[0]), Number(args[1]));
@@ -259,6 +261,15 @@ async function approveStreamer(interaction) {
     allowedMentions: { users: [ticket.user_id] },
   });
   await interaction.editReply(`Role streamera je přidělená.\n${streamNote}`);
+}
+
+/* ---------- Historie trestů v odvolání ---------- */
+
+async function appealHistory(interaction) {
+  if (!(await requireStaff(interaction))) return;
+  const ticket = await ticketInChannel(interaction.channelId);
+  if (!ticket) return;
+  await interaction.reply({ content: await historyText(interaction.guildId, ticket.user_id), flags: EPHEMERAL, allowedMentions: { parse: [] } });
 }
 
 /* ---------- Uzavření, transcript, hodnocení ---------- */

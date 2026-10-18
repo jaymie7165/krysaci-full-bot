@@ -73,6 +73,9 @@ function controls(ticket) {
       ...(ticket.category === 'streamer'
         ? [new ButtonBuilder().setCustomId('ticket:approve').setLabel('Schválit streamera').setStyle(ButtonStyle.Success)]
         : []),
+      ...(ticket.category === 'appeal'
+        ? [new ButtonBuilder().setCustomId('ticket:history').setLabel('Historie trestů').setStyle(ButtonStyle.Secondary)]
+        : []),
     ),
   ];
 }
