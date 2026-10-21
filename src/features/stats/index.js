@@ -55,7 +55,7 @@ export async function createStatsChannels(guild, category) {
   const { members, bots } = await countMembers(guild);
   const make = (name) => guild.channels.create({
     name, type: ChannelType.GuildVoice, parent: parent.id,
-    permissionOverwrites: [{ id: guild.roles.everyone.id, deny: [P.Connect] }],
+    permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [P.ViewChannel], deny: [P.Connect] }],
   });
   const [membersChannel, botsChannel] = [await make(memberName(members)), await make(botName(bots))];
   return { parent, membersChannel, botsChannel };
