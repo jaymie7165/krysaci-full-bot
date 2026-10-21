@@ -1,13 +1,13 @@
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, MessageFlags, PermissionFlagsBits as P,
-  StringSelectMenuBuilder,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, MessageFlags, ModalBuilder, PermissionFlagsBits as P,
+  StringSelectMenuBuilder, TextInputBuilder, TextInputStyle,
 } from 'discord.js';
 import { getSettings, query } from '../../db.js';
 import { BAR } from '../../theme.js';
 import { RANKS } from '../roles/data.js';
 import { checkAchievements } from '../achievements/index.js';
 import { syncRank } from '../riot/index.js';
-import { balancedSplit, randomSplit } from './teams.js';
+import { balancedSplit, randomSplit, shuffle } from './teams.js';
 import { POSITIONS, STARTERS, buildLobby } from './ui.js';
 
 const EPHEMERAL = MessageFlags.Ephemeral;
@@ -69,15 +69,22 @@ export async function handleCustomInteraction(interaction) {
     case 'dismiss': return interaction.update({ content: 'Zrušeno.', components: [] });
     case 'cancel': return cancel(interaction, id);
     case 'rematch': return rematch(interaction, id);
+    case 'draftcaps': return startDraft(interaction, id, { mode: extra });
+    case 'draftmanual': return startDraft(interaction, id, { captains: interaction.values });
+    case 'pick': return pickPlayer(interaction, id);
+    case 'draftauto': return draftAuto(interaction, id);
+    case 'draftcancel': return draftCancel(interaction, id);
+    case 'link': return showLinkModal(interaction, id);
+    case 'linkmodal': return saveLink(interaction, id);
   }
 }
 
 /* ---------- Vytvoření a zveřejnění lobby ---------- */
 
-async function postLobby(channel, { guildId, organizerId, mode, note }, players = []) {
+async function postLobby(channel, { guildId, organizerId, mode, note, joinLink = null }, players = []) {
   const { rows: [lobby] } = await query(
-    'INSERT INTO custom_lobbies (guild_id, channel_id, organizer_id, mode, note) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-    [guildId, channel.id, organizerId, mode, note],
+    'INSERT INTO custom_lobbies (guild_id, channel_id, organizer_id, mode, note, join_link) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+    [guildId, channel.id, organizerId, mode, note, joinLink],
   );
   for (const p of players) {
     await query('INSERT INTO custom_players (lobby_id, user_id, positions, rank_idx) VALUES ($1, $2, $3, $4)', [lobby.id, p.user_id, p.positions, p.rank_idx]);
@@ -109,8 +116,18 @@ async function refreshLobby(client, lobbyId) {
   if (!lobby) return;
   const channel = await client.channels.fetch(lobby.channel_id).catch(() => null);
   const message = await channel?.messages.fetch(lobby.message_id).catch(() => null);
-  await message?.edit(buildLobby(lobby, await getPlayers(lobbyId)));
+  await message?.edit(await lobbyPayload(client, lobby, await getPlayers(lobbyId)));
 }
+
+// Jména hráčů pro nabídku výběru v draftu.
+async function namesFor(client, lobby, players) {
+  const guild = client.guilds?.cache?.get(lobby.guild_id);
+  const members = guild ? await guild.members.fetch({ user: players.map((p) => p.user_id) }).catch(() => null) : null;
+  return Object.fromEntries(players.map((p) => [p.user_id, members?.get(p.user_id)?.displayName ?? p.user_id]));
+}
+
+const lobbyPayload = async (client, lobby, players) =>
+  buildLobby(lobby, players, { names: lobby.status === 'draft' ? await namesFor(client, lobby, players) : {} });
 
 /* ---------- Přihlášení hráčů ---------- */
 
@@ -174,6 +191,7 @@ async function splitMenu(interaction, id) {
     content: 'Jak mám hráče rozdělit?\n-# Podle ranku se bere rank LoL role, kterou si hráči zvolili v kanálu pro role.',
     components: [new ActionRowBuilder().addComponents(
       b('balanced', 'Podle ranku', ButtonStyle.Primary), b('random', 'Náhodně', ButtonStyle.Secondary), b('manual', 'Ručně', ButtonStyle.Secondary),
+      b('draft', 'Draft s kapitány', ButtonStyle.Success),
     )],
     flags: EPHEMERAL,
   });
@@ -187,6 +205,25 @@ async function doSplit(interaction, id, method) {
 
   const starters = pickStarters(await getPlayers(id));
   if (starters.length < 2) return interaction.update({ content: 'Na rozdělení potřebuješ aspoň 2 hráče (sudý počet).', components: [] });
+
+  if (method === 'draft') {
+    if (starters.length < 4) return interaction.update({ content: 'Na draft potřebuješ aspoň 4 hráče (sudý počet).', components: [] });
+    const members = await interaction.guild.members.fetch({ user: starters.map((p) => p.user_id) }).catch(() => null);
+    const cb = (mode, label, style) => new ButtonBuilder().setCustomId(`custom:draftcaps:${id}:${mode}`).setLabel(label).setStyle(style);
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(`custom:draftmanual:${id}`)
+      .setPlaceholder('Nebo vyber 2 kapitány ručně…')
+      .setMinValues(2)
+      .setMaxValues(2)
+      .addOptions(starters.map((p) => ({ label: (members?.get(p.user_id)?.displayName ?? p.user_id).slice(0, 100), value: p.user_id })));
+    return interaction.update({
+      content: 'Kdo budou kapitáni?\n-# Kapitáni se střídají ve výběru (pořadí ABBA). Kapitán se slabším rankem vybírá první.',
+      components: [
+        new ActionRowBuilder().addComponents(cb('rank', 'Dva nejlepší podle ranku', ButtonStyle.Primary), cb('random', 'Náhodní kapitáni', ButtonStyle.Secondary)),
+        new ActionRowBuilder().addComponents(menu),
+      ],
+    });
+  }
 
   if (method === 'manual') {
     const members = await interaction.guild.members.fetch({ user: starters.map((p) => p.user_id) }).catch(() => null);
@@ -252,7 +289,8 @@ async function applyTeams(client, guild, lobby, blue, red, settings) {
     parent: lobbyChannel.parentId ?? null,
     reason: 'Custom hra',
     permissionOverwrites: [
-      { id: guild.roles.everyone.id, deny: [P.ViewChannel, P.Connect] },
+      // Viditelné pro všechny (ať je vidět, že server žije), připojit se smí jen daný tým.
+      { id: guild.roles.everyone.id, allow: [P.ViewChannel, P.ReadMessageHistory], deny: [P.Connect, P.SendMessages] },
       ...ids.map((id) => ({ id, allow: [P.ViewChannel, P.Connect, P.Speak, P.SendMessages, P.ReadMessageHistory] })),
       ...(settings.staffRole ? [{ id: settings.staffRole, allow: [P.ViewChannel, P.Connect, P.MoveMembers, P.SendMessages] }] : []),
       { id: client.user.id, allow: [P.ViewChannel, P.Connect, P.ManageChannels, P.MoveMembers, P.SendMessages, P.ReadMessageHistory] },
@@ -276,7 +314,7 @@ async function applyTeams(client, guild, lobby, blue, red, settings) {
       return `<@${id}>${p?.positions ? ` · ${p.positions}` : ''}`;
     }).join('\n');
     return channel.send({
-      content: `${emoji} **${side}**: tvůj tým je tady! ${ids.map((id) => `<@${id}>`).join(' ')}\n\n**Soupiska**\n${roster}\n\nPřipoj se do tohoto voice kanálu, hra brzy začne.`,
+      content: `${emoji} **${side}**: tvůj tým je tady! ${ids.map((id) => `<@${id}>`).join(' ')}\n\n**Soupiska**\n${roster}\n\nPřipoj se do tohoto voice kanálu, hra brzy začne.${lobby.join_link ? `\n🎮 Lobby v LoLu: ${lobby.join_link}` : ''}`,
       allowedMentions: { users: ids },
     });
   };
@@ -284,7 +322,7 @@ async function applyTeams(client, guild, lobby, blue, red, settings) {
 
   // V kanálu s lobby jen krátká informace bez označování.
   await lobbyChannel.send({
-    content: `Týmy jsou rozdělené. Každý tým má svou soukromou voice roomku a označení najde v jejím chatu.\n🔵 ${voiceBlue} · 🔴 ${voiceRed}`,
+    content: `Týmy jsou rozdělené. Každý tým má svou voice roomku (vidí ji všichni, připojit se smí jen daný tým) a označení najde v jejím chatu.\n🔵 ${voiceBlue} · 🔴 ${voiceRed}${lobby.join_link ? `\n🎮 Lobby v LoLu: ${lobby.join_link}` : ''}`,
     allowedMentions: { parse: [] },
     reply: { messageReference: lobby.message_id, failIfNotExists: false },
   });
@@ -380,7 +418,7 @@ async function confirmWinner(interaction, id, team) {
 
 async function cancel(interaction, id) {
   if (!(await requireStaff(interaction))) return;
-  const upd = await query(`UPDATE custom_lobbies SET status = 'cancelled' WHERE id = $1 AND status IN ('open', 'teams') RETURNING *`, [id]);
+  const upd = await query(`UPDATE custom_lobbies SET status = 'cancelled' WHERE id = $1 AND status IN ('open', 'draft', 'teams') RETURNING *`, [id]);
   if (!upd.rowCount) return interaction.reply({ content: 'Toto lobby už je uzavřené.', flags: EPHEMERAL });
   await interaction.update(buildLobby(upd.rows[0], await getPlayers(id)));
 }
@@ -392,7 +430,7 @@ async function rematch(interaction, id) {
   await interaction.deferReply({ flags: EPHEMERAL });
   const players = (await getPlayers(id)).map((p) => ({ user_id: p.user_id, positions: p.positions, rank_idx: p.rank_idx }));
   const message = await postLobby(interaction.channel, {
-    guildId: interaction.guildId, organizerId: interaction.user.id, mode: lobby.mode, note: lobby.note,
+    guildId: interaction.guildId, organizerId: interaction.user.id, mode: lobby.mode, note: lobby.note, joinLink: lobby.join_link,
   }, players);
   await interaction.editReply(`Nové lobby se stejnými hráči: ${message.url}`);
 }
@@ -439,7 +477,7 @@ export async function showHistory(interaction) {
 export async function sweepCustomLobbies(client) {
   // Lobby, které nikdo nedohrál, po 12 hodinách zavřít.
   const { rows: stale } = await query(
-    `UPDATE custom_lobbies SET status = 'cancelled' WHERE status IN ('open', 'teams') AND created_at < now() - ($1 || ' hours')::interval RETURNING id`,
+    `UPDATE custom_lobbies SET status = 'cancelled' WHERE status IN ('open', 'draft', 'teams') AND created_at < now() - ($1 || ' hours')::interval RETURNING id`,
     [String(STALE_HOURS)],
   );
   for (const l of stale) await refreshLobby(client, l.id).catch(console.error);
@@ -526,4 +564,148 @@ export async function cleanupOrphans(interaction) {
   await interaction.editReply(
     `Smazáno prázdných roomek: **${removed}**.` + (occupied ? `\nPřeskočil jsem ${occupied}, protože jsou obsazené.` : ''),
   );
+}
+
+/* ---------- Odkaz do LoL lobby ---------- */
+
+// Odkaz vytváří klient hry (Pozvat do lobby), bot ho jen sdílí. Musí vést na gg.riotgames.com.
+export const isRiotLink = (value) => /^https:\/\/gg\.riotgames\.com\/[^\s]+$/i.test(String(value).trim());
+
+async function showLinkModal(interaction, id) {
+  if (!(await requireStaff(interaction))) return;
+  const lobby = await getLobby(id);
+  if (!lobby || !['open', 'draft', 'teams'].includes(lobby.status)) return interaction.reply({ content: 'Toto lobby už je uzavřené.', flags: EPHEMERAL });
+  const input = new TextInputBuilder().setCustomId('url').setLabel('Odkaz z LoL (Pozvat do lobby)').setStyle(TextInputStyle.Short)
+    .setRequired(true).setMaxLength(200).setPlaceholder('https://gg.riotgames.com/LOL?joinCode=…');
+  if (lobby.join_link) input.setValue(lobby.join_link);
+  await interaction.showModal(new ModalBuilder().setCustomId(`custom:linkmodal:${id}`).setTitle('Odkaz do LoL lobby').addComponents(new ActionRowBuilder().addComponents(input)));
+}
+
+async function saveLink(interaction, id) {
+  if (!(await requireStaff(interaction))) return;
+  const url = interaction.fields.getTextInputValue('url').trim();
+  if (!isRiotLink(url)) {
+    return interaction.reply({ content: 'Odkaz musí začínat `https://gg.riotgames.com/`. V LoL klikni v lobby na pozvání a zkopíruj odkaz.', flags: EPHEMERAL });
+  }
+  const upd = await query(`UPDATE custom_lobbies SET join_link = $2 WHERE id = $1 AND status IN ('open', 'draft', 'teams') RETURNING *`, [id, url]);
+  if (!upd.rowCount) return interaction.reply({ content: 'Toto lobby už je uzavřené.', flags: EPHEMERAL });
+  await refreshLobby(interaction.client, id);
+  // Odkaz v běžné zprávě: Discord z něj sám udělá kartu s tlačítkem Spustit hru.
+  await interaction.channel.send({ content: `🎮 **Lobby v LoLu je připravené.** Přidej se:\n${url}`, allowedMentions: { parse: [] } });
+  await interaction.reply({ content: 'Odkaz je uložený a sdílený v kanálu.', flags: EPHEMERAL });
+}
+
+/* ---------- Draft s kapitány ---------- */
+
+// Pořadí výběrů: A = kapitán, který vybírá první (Blue), B = druhý (Red). Vzor ABBA je vyrovnaný pro každý sudý počet.
+export const draftOrder = (picks) => 'ABBA'.repeat(Math.ceil(picks / 4)).slice(0, picks);
+
+async function startDraft(interaction, id, { mode, captains }) {
+  const settings = await requireStaff(interaction);
+  if (!settings) return;
+  const lobby = await getLobby(id);
+  if (!lobby || !['open', 'teams'].includes(lobby.status)) return interaction.update({ content: 'Toto lobby už je uzavřené.', components: [] });
+  const starters = pickStarters(await getPlayers(id));
+  if (starters.length < 4) return interaction.update({ content: 'Na draft potřebuješ aspoň 4 hráče (sudý počet).', components: [] });
+  await interaction.deferUpdate();
+
+  if (lobby.status === 'teams') await deleteVoices(interaction.client, lobby);
+  const byRank = mode === 'rank' || Boolean(captains);
+  const ranked = byRank ? await refreshRanks(interaction.guild, starters, settings.roleMap) : starters;
+  const rankOf = (uid) => ranked.find((p) => p.user_id === uid)?.rank_idx ?? -1;
+
+  let caps = captains;
+  if (!caps) {
+    caps = mode === 'rank'
+      ? [...ranked].sort((a, b) => (b.rank_idx ?? -1) - (a.rank_idx ?? -1)).slice(0, 2).map((p) => p.user_id)
+      : shuffle(starters).slice(0, 2).map((p) => p.user_id);
+  }
+  let [first, second] = caps;
+  // Kapitán se slabším rankem vybírá první, při náhodném výběru rozhoduje los.
+  if (byRank ? rankOf(first) > rankOf(second) : Math.random() < 0.5) [first, second] = [second, first];
+
+  const order = draftOrder(starters.length - 2);
+  await query('UPDATE custom_players SET team = NULL WHERE lobby_id = $1', [id]);
+  await query(`UPDATE custom_players SET team = 'blue' WHERE lobby_id = $1 AND user_id = $2`, [id, first]);
+  await query(`UPDATE custom_players SET team = 'red' WHERE lobby_id = $1 AND user_id = $2`, [id, second]);
+  await query(
+    `UPDATE custom_lobbies SET status = 'draft', winner = NULL, draft_blue = $2, draft_red = $3, draft_order = $4, draft_turn = 0 WHERE id = $1`,
+    [id, first, second, order],
+  );
+  await refreshLobby(interaction.client, id);
+
+  const channel = await interaction.client.channels.fetch(lobby.channel_id);
+  await channel.send({
+    content: `🎯 **Draft začíná!** Kapitáni: 🔵 <@${first}> a 🔴 <@${second}>. Jako první vybírá <@${first}>.`,
+    allowedMentions: { users: [first, second] },
+    reply: { messageReference: lobby.message_id, failIfNotExists: false },
+  });
+  await interaction.editReply({ content: 'Draft je spuštěný.', components: [] });
+}
+
+async function pickPlayer(interaction, id) {
+  const lobby = await getLobby(id);
+  if (!lobby || lobby.status !== 'draft') return interaction.reply({ content: 'Draft už neběží.', flags: EPHEMERAL });
+  const order = lobby.draft_order;
+  const turn = lobby.draft_turn;
+  const side = order[turn] === 'A' ? 'blue' : 'red';
+  const captain = side === 'blue' ? lobby.draft_blue : lobby.draft_red;
+  if (interaction.user.id !== captain) {
+    return interaction.reply({ content: `Teď vybírá <@${captain}>. Počkej, až budeš na řadě.`, flags: EPHEMERAL, allowedMentions: { parse: [] } });
+  }
+
+  const pick = interaction.values[0];
+  const upd = await query(`UPDATE custom_players SET team = $3 WHERE lobby_id = $1 AND user_id = $2 AND team IS NULL RETURNING 1`, [id, pick, side]);
+  if (!upd.rowCount) return interaction.reply({ content: 'Tento hráč už není k dispozici.', flags: EPHEMERAL });
+  const next = await query('UPDATE custom_lobbies SET draft_turn = draft_turn + 1 WHERE id = $1 AND draft_turn = $2 RETURNING *', [id, turn]);
+  const fresh = next.rows[0];
+
+  if (fresh.draft_turn >= order.length) {
+    await interaction.deferUpdate();
+    return finishDraft(interaction.client, interaction.guild, fresh);
+  }
+  await interaction.update(await lobbyPayload(interaction.client, fresh, await getPlayers(id)));
+
+  // Další kapitán se označí jen tehdy, když se střídá. Upozornění po chvíli zmizí, ať se kanál nezahlcuje.
+  const nextCaptain = order[fresh.draft_turn] === 'A' ? fresh.draft_blue : fresh.draft_red;
+  if (nextCaptain !== captain) {
+    const note = await interaction.channel.send({ content: `<@${nextCaptain}> je na řadě s výběrem.`, allowedMentions: { users: [nextCaptain] } }).catch(() => null);
+    if (note) setTimeout(() => note.delete().catch(() => {}), 60_000);
+  }
+}
+
+// Týmy jsou kompletní: vytvoří se roomky a hráči se přesunou jako při běžném rozdělení.
+async function finishDraft(client, guild, lobby) {
+  const settings = await getSettings(lobby.guild_id);
+  const players = await getPlayers(lobby.id);
+  const blue = players.filter((p) => p.team === 'blue').map((p) => p.user_id);
+  const red = players.filter((p) => p.team === 'red').map((p) => p.user_id);
+  await query('UPDATE custom_lobbies SET draft_blue = NULL, draft_red = NULL, draft_order = NULL, draft_turn = 0 WHERE id = $1', [lobby.id]);
+  await applyTeams(client, guild, lobby, blue, red, settings);
+}
+
+async function draftAuto(interaction, id) {
+  if (!(await requireStaff(interaction))) return;
+  const lobby = await getLobby(id);
+  if (!lobby || lobby.status !== 'draft') return interaction.reply({ content: 'Draft už neběží.', flags: EPHEMERAL });
+  await interaction.deferUpdate();
+  const players = await getPlayers(id);
+  const pool = shuffle(pickStarters(players).filter((p) => !p.team));
+  for (let turn = lobby.draft_turn; turn < lobby.draft_order.length; turn++) {
+    const pick = pool.shift();
+    if (!pick) break;
+    await query(`UPDATE custom_players SET team = $3 WHERE lobby_id = $1 AND user_id = $2 AND team IS NULL`, [id, pick.user_id, lobby.draft_order[turn] === 'A' ? 'blue' : 'red']);
+  }
+  await finishDraft(interaction.client, interaction.guild, lobby);
+}
+
+async function draftCancel(interaction, id) {
+  if (!(await requireStaff(interaction))) return;
+  const { rows: [lobby] } = await query(
+    `UPDATE custom_lobbies SET status = 'open', draft_blue = NULL, draft_red = NULL, draft_order = NULL, draft_turn = 0 WHERE id = $1 AND status = 'draft' RETURNING *`,
+    [id],
+  );
+  if (!lobby) return interaction.reply({ content: 'Draft už neběží.', flags: EPHEMERAL });
+  await query('UPDATE custom_players SET team = NULL WHERE lobby_id = $1', [id]);
+  await interaction.update(buildLobby(lobby, await getPlayers(id)));
 }

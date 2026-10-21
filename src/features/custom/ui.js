@@ -1,6 +1,6 @@
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, MessageFlags, SeparatorBuilder,
-  SeparatorSpacingSize, TextDisplayBuilder,
+  SeparatorSpacingSize, StringSelectMenuBuilder, TextDisplayBuilder,
 } from 'discord.js';
 import { colors } from '../../theme.js';
 import { RANKS } from '../roles/data.js';
@@ -18,9 +18,18 @@ const line = (p, i) => {
   return `${i + 1}. <@${p.user_id}>${p.positions ? ` · ${p.positions}` : ''}${rank ? ` · ${rank}` : ''}`;
 };
 
+const linkBtn = (url) => new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('🎮 Spustit hru').setURL(url);
 const btn = (id, label, style = ButtonStyle.Secondary) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style);
 
-export function buildLobby(lobby, players) {
+// Stav draftu: kdo hraje (sudý počet, max. 10), kdo je ještě k výběru a kdo čeká jako náhradník.
+function draftState(players) {
+  const n = Math.min(players.length, STARTERS);
+  const starters = players.slice(0, n - (n % 2));
+  return { starters, pool: starters.filter((p) => !p.team), rest: players.slice(starters.length) };
+}
+
+// names (volitelné): { userId: zobrazované jméno } pro nabídku výběru v draftu
+export function buildLobby(lobby, players, { names = {} } = {}) {
   const id = lobby.id;
   const modeLabel = lobby.mode === 'aram' ? 'ARAM' : '5v5';
   const header =
@@ -45,6 +54,22 @@ export function buildLobby(lobby, players) {
     if (subs.length) {
       container.addTextDisplayComponents(text(`🪑 **Náhradníci**\n${subs.map((p, i) => line(p, i)).join('\n')}`));
     }
+  } else if (lobby.status === 'draft') {
+    const { pool, rest } = draftState(players);
+    const order = lobby.draft_order ?? '';
+    const turn = lobby.draft_turn ?? 0;
+    const side = order[turn] === 'A' ? 'blue' : 'red';
+    const captain = side === 'blue' ? lobby.draft_blue : lobby.draft_red;
+    const draftTeam = (label, emoji, team, cap) => {
+      const list = players.filter((p) => p.team === team).sort((a, b) => (b.user_id === cap) - (a.user_id === cap));
+      return `**${emoji} ${label}** · ${list.length} hráčů\n${list.map((p, i) => `${line(p, i)}${p.user_id === cap ? ' 👑' : ''}`).join('\n') || '—'}`;
+    };
+    container
+      .addTextDisplayComponents(text(draftTeam('Blue Team', '🔵', 'blue', lobby.draft_blue)))
+      .addTextDisplayComponents(text(draftTeam('Red Team', '🔴', 'red', lobby.draft_red)))
+      .addTextDisplayComponents(text(`🎯 **Draft** · výběr ${Math.min(turn + 1, order.length)} z ${order.length}\nNa řadě: <@${captain}> (${side === 'blue' ? '🔵 Blue' : '🔴 Red'})`))
+      .addTextDisplayComponents(text(`🪑 **K výběru**\n${pool.map((p, i) => line(p, i)).join('\n') || '—'}`));
+    if (rest.length) container.addTextDisplayComponents(text(`-# Náhradníci: ${rest.map((p) => `<@${p.user_id}>`).join(', ')}`));
   } else {
     container
       .addTextDisplayComponents(text(teamBlock('Blue Team', '🔵', 'blue')))
@@ -64,12 +89,32 @@ export function buildLobby(lobby, players) {
   if (lobby.status === 'open') {
     const row1 = [btn(`custom:join:${id}`, 'Připojit se', ButtonStyle.Primary), btn(`custom:leave:${id}`, 'Odejít')];
     if (lobby.mode !== 'aram') row1.push(btn(`custom:pos:${id}`, 'Pozice'));
+    if (lobby.join_link) row1.push(linkBtn(lobby.join_link));
     container
       .addSeparatorComponents(divider())
       .addActionRowComponents(new ActionRowBuilder().addComponents(row1))
       .addActionRowComponents(
-        new ActionRowBuilder().addComponents(btn(`custom:split:${id}`, 'Rozdělit týmy'), btn(`custom:cancel:${id}`, 'Uzavřít lobby', ButtonStyle.Danger)),
+        new ActionRowBuilder().addComponents(btn(`custom:split:${id}`, 'Rozdělit týmy'), btn(`custom:link:${id}`, '🔗 Odkaz do LoL'), btn(`custom:cancel:${id}`, 'Uzavřít lobby', ButtonStyle.Danger)),
       );
+  } else if (lobby.status === 'draft') {
+    const { pool } = draftState(players);
+    container.addSeparatorComponents(divider());
+    if (pool.length) {
+      const menu = new StringSelectMenuBuilder().setCustomId(`custom:pick:${id}`).setPlaceholder('Kapitán na řadě: vyber hráče…').addOptions(
+        pool.map((p) => ({
+          label: `${names[p.user_id] ?? p.user_id}${p.rank_idx != null ? ` · ${RANKS.lol[p.rank_idx]}` : ''}`.slice(0, 100),
+          value: p.user_id,
+        })),
+      );
+      container.addActionRowComponents(new ActionRowBuilder().addComponents(menu));
+    }
+    container.addActionRowComponents(
+      new ActionRowBuilder().addComponents(
+        btn(`custom:draftauto:${id}`, 'Dokončit automaticky'),
+        btn(`custom:draftcancel:${id}`, 'Zrušit draft', ButtonStyle.Danger),
+        ...(lobby.join_link ? [linkBtn(lobby.join_link)] : []),
+      ),
+    );
   } else if (lobby.status === 'teams') {
     container
       .addSeparatorComponents(divider())
@@ -77,12 +122,14 @@ export function buildLobby(lobby, players) {
         new ActionRowBuilder().addComponents(
           btn(`custom:win:${id}:blue`, 'Vyhrál Blue', ButtonStyle.Primary),
           btn(`custom:win:${id}:red`, 'Vyhrál Red', ButtonStyle.Danger),
+          ...(lobby.join_link ? [linkBtn(lobby.join_link)] : []),
         ),
       )
       .addActionRowComponents(
         new ActionRowBuilder().addComponents(
           btn(`custom:move:${id}`, 'Přesunout hráče'),
           btn(`custom:split:${id}`, 'Znovu rozdělit'),
+          btn(`custom:link:${id}`, '🔗 Odkaz do LoL'),
           btn(`custom:cancel:${id}`, 'Zrušit hru'),
         ),
       );
