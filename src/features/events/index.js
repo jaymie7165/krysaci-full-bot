@@ -1,10 +1,11 @@
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, MessageFlags, ModalBuilder, PermissionFlagsBits as P,
+  ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, MessageFlags, ModalBuilder, PermissionFlagsBits as P,
   SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder, TextInputBuilder, TextInputStyle,
 } from 'discord.js';
 import { getSettings, query } from '../../db.js';
 import { colors } from '../../theme.js';
 import { checkAchievements } from '../achievements/index.js';
+import { scheduleBoardUpdate } from '../tonight/board.js';
 import { parseCzechDateTime } from './time.js';
 
 const text = (c) => new TextDisplayBuilder().setContent(c);
@@ -50,8 +51,17 @@ export function buildEvent(ev, signups, { ping } = {}) {
 }
 
 export async function handleEventInteraction(interaction) {
-  const [, action, a, b] = interaction.customId.split(':');
-  if (action === 'create') return createEvent(interaction, a, b);
+  const action = interaction.customId.split(':')[1];
+  try {
+    return await dispatchEvent(interaction);
+  } finally {
+    if (['create', 'join', 'leave', 'cancel'].includes(action) && interaction.guildId) scheduleBoardUpdate(interaction.client, interaction.guildId);
+  }
+}
+
+async function dispatchEvent(interaction) {
+  const [, action, a, b, c] = interaction.customId.split(':');
+  if (action === 'create') return createEvent(interaction, a, b, c);
   const id = Number(a);
   if (action === 'join') return join(interaction, id);
   if (action === 'leave') return leave(interaction, id);
@@ -62,21 +72,22 @@ export async function handleEventInteraction(interaction) {
 export async function showCreateEventModal(interaction) {
   const role = interaction.options.getRole('role');
   const channel = interaction.options.getChannel('kanal');
+  const publish = interaction.options.getBoolean('publikovat') ?? false;
   const field = (id, label, style, extra = {}) => {
     const t = new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(extra.required ?? true).setMaxLength(extra.max ?? 100);
     if (extra.placeholder) t.setPlaceholder(extra.placeholder);
     return new ActionRowBuilder().addComponents(t);
   };
-  const modal = new ModalBuilder().setCustomId(`event:create:${role?.id ?? 0}:${channel?.id ?? 0}`).setTitle('Nový event').addComponents(
+  const modal = new ModalBuilder().setCustomId(`event:create:${role?.id ?? 0}:${channel?.id ?? 0}:${publish ? 1 : 0}`).setTitle('Nový event').addComponents(
     field('title', 'Název', TextInputStyle.Short, { max: 80 }),
     field('when', 'Kdy (český čas)', TextInputStyle.Short, { placeholder: 'Např. 20.10. 20:00' }),
-    field('desc', 'Popis', TextInputStyle.Paragraph, { required: false, max: 600 }),
+    field('desc', 'Popis', TextInputStyle.Paragraph, { required: false, max: 1500 }),
     field('cap', 'Limit míst (prázdné = bez limitu)', TextInputStyle.Short, { required: false, max: 3 }),
   );
   await interaction.showModal(modal);
 }
 
-async function createEvent(interaction, roleId, channelId) {
+async function createEvent(interaction, roleId, channelId, publish) {
   await interaction.deferReply({ flags: EPHEMERAL });
   const f = (id) => interaction.fields.getTextInputValue(id).trim();
   const startsAt = parseCzechDateTime(f('when'));
@@ -99,8 +110,15 @@ async function createEvent(interaction, roleId, channelId) {
     [interaction.guildId, channel.id, f('title'), f('desc'), startsAt, capacity, interaction.user.id, soon],
   );
   try {
-    const ping = roleId !== '0' ? `<@&${roleId}>` : undefined;
-    const message = await channel.send({ ...buildEvent(ev, [], { ping }), allowedMentions: { roles: ping ? [roleId] : [] } });
+    // Role @everyone se označí jako @everyone, jiná role běžným označením.
+    const everyone = roleId === interaction.guildId;
+    const ping = roleId === '0' ? undefined : everyone ? '@everyone' : `<@&${roleId}>`;
+    const message = await channel.send({
+      ...buildEvent(ev, [], { ping }),
+      allowedMentions: everyone ? { parse: ['everyone'] } : { roles: ping ? [roleId] : [] },
+    });
+    // V oznamovacím kanálu jde zprávu rovnou publikovat (odeslat serverům, které kanál sledují).
+    if (publish === '1' && channel.type === ChannelType.GuildAnnouncement) await message.crosspost().catch((e) => console.error('Publikace události:', e.message));
     await query('UPDATE events SET message_id = $1 WHERE id = $2', [message.id, ev.id]);
     await interaction.editReply(`Event je zveřejněný: ${message.url}`);
   } catch (err) {
