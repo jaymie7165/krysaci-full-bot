@@ -6,6 +6,7 @@ import { getSettings, query } from '../../db.js';
 import { GAMES, RANKS, gameById } from '../roles/data.js';
 import { checkAchievements } from '../achievements/index.js';
 import { BAR } from '../../theme.js';
+import { scheduleBoardUpdate } from '../tonight/board.js';
 import { buildPost } from './ui.js';
 
 const EPHEMERAL = MessageFlags.Ephemeral;
@@ -21,6 +22,15 @@ const getPost = async (id) => (await query('SELECT * FROM lfg_posts WHERE id = $
 const getMembers = async (id) => (await query('SELECT * FROM lfg_members WHERE post_id = $1 ORDER BY joined_at', [id])).rows;
 
 export async function handleLfgInteraction(interaction) {
+  const action = interaction.customId.split(':')[1];
+  try {
+    return await dispatchLfg(interaction);
+  } finally {
+    if (['create', 'join', 'leave', 'close'].includes(action) && interaction.guildId) scheduleBoardUpdate(interaction.client, interaction.guildId);
+  }
+}
+
+async function dispatchLfg(interaction) {
   const [, action, arg] = interaction.customId.split(':');
   switch (action) {
     case 'new': return startLfg(interaction);
@@ -220,6 +230,7 @@ async function createVoice(guild, post) {
     type: ChannelType.GuildVoice,
     parent: settings.lfgCategory ?? lfgChannel?.parentId ?? null,
     userLimit: post.capacity,
+    permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [P.ViewChannel, P.Connect] }],
     reason: post.capacity === 0 ? 'LFG pokec: přidal se druhý člověk' : 'LFG parta je kompletní',
   });
 }
