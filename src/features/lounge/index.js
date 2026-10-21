@@ -63,6 +63,8 @@ async function createLounge(state, settings) {
     type: ChannelType.GuildVoice,
     parent: settings.loungeCategory ?? state.channel?.parentId ?? null,
     reason: 'Voice Lounge',
+    // Viditelná a otevřená pro všechny, dokud ji správce nezamkne.
+    permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [P.ViewChannel, P.Connect] }],
   });
   const { rows: [lounge] } = await query('INSERT INTO lounges (channel_id, guild_id, owner_id) VALUES ($1, $2, $3) RETURNING *', [channel.id, guild.id, member.id]);
 
@@ -171,7 +173,7 @@ async function toggleLock(interaction, lounge) {
     for (const m of humans(channel).values()) await channel.permissionOverwrites.edit(m.id, { Connect: true }).catch(() => {});
     await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: false });
   } else {
-    await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: null });
+    await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: true });
   }
   const { rows: [updated] } = await query('UPDATE lounges SET locked = $2 WHERE channel_id = $1 RETURNING *', [lounge.channel_id, locked]);
   await interaction.editReply(buildLoungePanel(updated));
