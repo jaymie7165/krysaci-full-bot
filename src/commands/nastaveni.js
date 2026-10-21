@@ -5,12 +5,17 @@ import { buildRolesPanel } from '../features/roles/ui.js';
 import { allRoleDefs } from '../features/roles/data.js';
 import { welcomeMember } from '../features/welcome/index.js';
 import { buildLfgPanel } from '../features/lfg/ui.js';
+import { buildCardsPanel } from '../features/cards/index.js';
+import { buildBoard } from '../features/tonight/board.js';
 import { buildCommunityPanel } from '../features/community/index.js';
 import { createStatsChannels } from '../features/stats/index.js';
 import { BAR } from '../theme.js';
 import { backfillBaseRole, canAssign, ensureRole, parseColor } from '../features/baserole/index.js';
 
 const EPHEMERAL = MessageFlags.Ephemeral;
+
+// Kanály, do kterých bot smí psát: textové i oznamovací.
+const TEXT_CHANNELS = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 
 export const data = new SlashCommandBuilder()
   .setName('nastaveni')
@@ -19,29 +24,29 @@ export const data = new SlashCommandBuilder()
   .setDMPermission(false)
   .addSubcommand((s) =>
     s.setName('tickety').setDescription('Nastaví ticket systém a pošle panel do zvoleného kanálu')
-      .addChannelOption((o) => o.setName('panel').setDescription('Kanál, kam se pošle panel Support Center').addChannelTypes(ChannelType.GuildText).setRequired(true))
+      .addChannelOption((o) => o.setName('panel').setDescription('Kanál, kam se pošle panel Support Center').addChannelTypes(...TEXT_CHANNELS).setRequired(true))
       .addChannelOption((o) => o.setName('kategorie').setDescription('Kategorie, ve které se budou vytvářet tickety').addChannelTypes(ChannelType.GuildCategory).setRequired(true))
-      .addChannelOption((o) => o.setName('log').setDescription('Privátní kanál pro týmový log a přepisy').addChannelTypes(ChannelType.GuildText).setRequired(true))
+      .addChannelOption((o) => o.setName('log').setDescription('Privátní kanál pro týmový log a přepisy').addChannelTypes(...TEXT_CHANNELS).setRequired(true))
       .addRoleOption((o) => o.setName('moderatori').setDescription('Role, která vidí všechny tickety').setRequired(true)),
   )
   .addSubcommand((s) =>
     s.setName('role').setDescription('Vytvoří chybějící role a pošle panel pro výběr rolí')
-      .addChannelOption((o) => o.setName('kanal').setDescription('Kanál pro výběr rolí (jiný než přivítání)').addChannelTypes(ChannelType.GuildText).setRequired(true)),
+      .addChannelOption((o) => o.setName('kanal').setDescription('Kanál pro výběr rolí (jiný než přivítání)').addChannelTypes(...TEXT_CHANNELS).setRequired(true)),
   )
   .addSubcommand((s) =>
     s.setName('welcome').setDescription('Nastaví kanál s přivítáním nových členů')
-      .addChannelOption((o) => o.setName('kanal').setDescription('Kanál, kde se zobrazí přivítání').addChannelTypes(ChannelType.GuildText).setRequired(true)),
+      .addChannelOption((o) => o.setName('kanal').setDescription('Kanál, kde se zobrazí přivítání').addChannelTypes(...TEXT_CHANNELS).setRequired(true)),
   )
   .addSubcommand((s) =>
     s.setName('lfg').setDescription('Nastaví hledání spoluhráčů a pošle panel do zvoleného kanálu')
-      .addChannelOption((o) => o.setName('kanal').setDescription('Společný kanál pro LFG příspěvky').addChannelTypes(ChannelType.GuildText).setRequired(true))
+      .addChannelOption((o) => o.setName('kanal').setDescription('Společný kanál pro LFG příspěvky').addChannelTypes(...TEXT_CHANNELS).setRequired(true))
       .addChannelOption((o) => o.setName('kategorie').setDescription('Kategorie pro dočasné voice roomky (výchozí: kategorie LFG kanálu)').addChannelTypes(ChannelType.GuildCategory)),
   )
   .addSubcommand((s) =>
     s.setName('komunita').setDescription('Nastaví panel Komunita (profil, nápady, propojení LoL), návrhy a milníky')
-      .addChannelOption((o) => o.setName('panel').setDescription('Kanál, kam se pošle panel Komunita').addChannelTypes(ChannelType.GuildText).setRequired(true))
-      .addChannelOption((o) => o.setName('navrhy').setDescription('Kanál, kam se budou posílat nápady od členů').addChannelTypes(ChannelType.GuildText).setRequired(true))
-      .addChannelOption((o) => o.setName('milniky').setDescription('Kanál pro oznámení nových milníků (volitelné)').addChannelTypes(ChannelType.GuildText)),
+      .addChannelOption((o) => o.setName('panel').setDescription('Kanál, kam se pošle panel Komunita').addChannelTypes(...TEXT_CHANNELS).setRequired(true))
+      .addChannelOption((o) => o.setName('navrhy').setDescription('Kanál, kam se budou posílat nápady od členů').addChannelTypes(...TEXT_CHANNELS).setRequired(true))
+      .addChannelOption((o) => o.setName('milniky').setDescription('Kanál pro oznámení nových milníků (volitelné)').addChannelTypes(...TEXT_CHANNELS)),
   )
   .addSubcommand((s) =>
     s.setName('lounge').setDescription('Zapne Voice Lounge: vlastní dočasné roomky pro členy')
@@ -54,7 +59,7 @@ export const data = new SlashCommandBuilder()
   )
   .addSubcommand((s) =>
     s.setName('stream').setDescription('Nastaví kanál pro oznámení streamů')
-      .addChannelOption((o) => o.setName('kanal').setDescription('Kanál, kam se budou oznamovat streamy').addChannelTypes(ChannelType.GuildText).setRequired(true))
+      .addChannelOption((o) => o.setName('kanal').setDescription('Kanál, kam se budou oznamovat streamy').addChannelTypes(...TEXT_CHANNELS).setRequired(true))
       .addRoleOption((o) => o.setName('role').setDescription('Role, která se označí při zahájení streamu (volitelné)')),
   )
   .addSubcommand((s) =>
@@ -68,7 +73,15 @@ export const data = new SlashCommandBuilder()
   )
   .addSubcommand((s) =>
     s.setName('modlog').setDescription('Nastaví kanál, kam se zapisují všechny zásahy moderátorů')
-      .addChannelOption((o) => o.setName('kanal').setDescription('Privátní kanál pro tým').addChannelTypes(ChannelType.GuildText).setRequired(true)),
+      .addChannelOption((o) => o.setName('kanal').setDescription('Privátní kanál pro tým').addChannelTypes(...TEXT_CHANNELS).setRequired(true)),
+  )
+  .addSubcommand((s) =>
+    s.setName('get2know').setDescription('Nastaví kanál Get2know: panel a veřejné vizitky členů')
+      .addChannelOption((o) => o.setName('kanal').setDescription('Kanál get2know').addChannelTypes(...TEXT_CHANNELS).setRequired(true)),
+  )
+  .addSubcommand((s) =>
+    s.setName('dnesvecer').setDescription('Zapne přehled Dnes večer a spontánní „Hrajeme?“ v jednom kanálu')
+      .addChannelOption((o) => o.setName('kanal').setDescription('Kanál, kde bude přehled a otázky Hrajeme?').addChannelTypes(...TEXT_CHANNELS).setRequired(true)),
   )
   .addSubcommand((s) => s.setName('welcome-test').setDescription('Vyzkouší přivítání na tobě'));
 
@@ -85,6 +98,8 @@ export async function execute(interaction) {
   if (sub === 'streamer') return setupStreamerRole(interaction);
   if (sub === 'mys') return setupBaseRole(interaction);
   if (sub === 'modlog') return setupModLog(interaction);
+  if (sub === 'get2know') return setupCards(interaction);
+  if (sub === 'dnesvecer') return setupTonight(interaction);
   if (sub === 'welcome-test') return testWelcome(interaction);
 }
 
@@ -277,4 +292,19 @@ async function setupModLog(interaction) {
   const channel = interaction.options.getChannel('kanal', true);
   await saveSettings(interaction.guildId, { modLog: channel.id });
   await interaction.reply({ content: `Hotovo. Zásahy moderátorů se budou zapisovat do ${channel}.`, flags: EPHEMERAL });
+}
+
+async function setupCards(interaction) {
+  const channel = interaction.options.getChannel('kanal', true);
+  await saveSettings(interaction.guildId, { cardChannel: channel.id });
+  await replacePanel(interaction, 'cards', channel, buildCardsPanel({ iconUrl: panelIcon(interaction.guild, interaction.client) }));
+  await interaction.reply({ content: `Hotovo. Panel Get2know je v ${channel}, vizitky členů se budou zveřejňovat tam.`, flags: EPHEMERAL });
+}
+
+async function setupTonight(interaction) {
+  await interaction.deferReply({ flags: EPHEMERAL });
+  const channel = interaction.options.getChannel('kanal', true);
+  await saveSettings(interaction.guildId, { tonightChannel: channel.id });
+  await replacePanel(interaction, 'tonight', channel, await buildBoard(interaction.guild, interaction.client));
+  await interaction.editReply(`Hotovo. Přehled Dnes večer je v ${channel}. Otázky „Hrajeme?“ se budou zveřejňovat tam a přehled se sám aktualizuje.`);
 }
