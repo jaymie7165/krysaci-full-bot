@@ -18,6 +18,9 @@ import { startStreamPoller } from './features/streams/index.js';
 import { scheduleStatsUpdate, startStatsSweeper } from './features/stats/index.js';
 import { assignBaseRole } from './features/baserole/index.js';
 import { handleModInteraction } from './features/moderation/index.js';
+import { handleCardInteraction } from './features/cards/index.js';
+import { handleTonightInteraction, startHrajemeSweeper } from './features/tonight/index.js';
+import { scheduleBoardUpdate, startBoardUpdater } from './features/tonight/board.js';
 
 const client = new Client({
   // MessageContent je potřeba pro přepisy ticketů (zapni ho v Developer Portalu).
@@ -40,6 +43,8 @@ client.once(Events.ClientReady, async (c) => {
   startEventSweeper(c);
   cleanupLounges(c).catch(console.error);
   startPulseSweeper(c);
+  startHrajemeSweeper(c);
+  startBoardUpdater(c);
   startStreamPoller(c);
   startStatsSweeper(c);
   console.log(`Bot běží jako ${c.user.tag}`);
@@ -62,6 +67,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     else if (feature === 'event') await handleEventInteraction(interaction);
     else if (feature === 'tour') await handleTournamentInteraction(interaction);
     else if (feature === 'mod') await handleModInteraction(interaction);
+    else if (feature === 'card') await handleCardInteraction(interaction);
+    else if (feature === 'tonight' || feature === 'hr') await handleTonightInteraction(interaction);
     else if (feature === 'lounge') await handleLoungeInteraction(interaction);
     else if (feature === 'pulse') await handlePulseInteraction(interaction);
   } catch (err) {
@@ -72,7 +79,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-client.on(Events.VoiceStateUpdate, (oldState, newState) => onVoiceStateUpdate(oldState, newState).catch(console.error));
+client.on(Events.VoiceStateUpdate, (oldState, newState) => {
+  scheduleBoardUpdate(newState.client, newState.guild.id, 15_000);
+  onVoiceStateUpdate(oldState, newState).catch(console.error);
+});
 client.on(Events.GuildMemberAdd, (member) => {
   scheduleStatsUpdate(member.guild);
   assignBaseRole(member).catch(console.error);

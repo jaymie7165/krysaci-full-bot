@@ -197,6 +197,7 @@ export async function initDb() {
     ALTER TABLE custom_lobbies ADD COLUMN IF NOT EXISTS draft_red TEXT;
     ALTER TABLE custom_lobbies ADD COLUMN IF NOT EXISTS draft_order TEXT;
     ALTER TABLE custom_lobbies ADD COLUMN IF NOT EXISTS draft_turn INT NOT NULL DEFAULT 0;
+    ALTER TABLE custom_lobbies ADD COLUMN IF NOT EXISTS join_link TEXT;
     ALTER TABLE custom_lobbies ADD COLUMN IF NOT EXISTS voice_blue_empty_since TIMESTAMPTZ;
     ALTER TABLE custom_lobbies ADD COLUMN IF NOT EXISTS voice_red_empty_since TIMESTAMPTZ;
     CREATE TABLE IF NOT EXISTS pulses (
