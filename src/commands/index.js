@@ -7,6 +7,7 @@ import * as pulse from './pulse.js';
 import * as stream from './stream.js';
 import * as mod from './mod.js';
 import * as moderace from './moderace.js';
+import * as hlasovani from './hlasovani.js';
 
 export const commands = new Map([
   [nastaveni.data.name, nastaveni],
@@ -18,4 +19,5 @@ export const commands = new Map([
   [stream.data.name, stream],
   [mod.data.name, mod],
   [moderace.data.name, moderace],
+  [hlasovani.data.name, hlasovani],
 ]);
