@@ -285,6 +285,33 @@ export async function initDb() {
       vote TEXT NOT NULL,
       PRIMARY KEY (hrajeme_id, user_id)
     );
+    CREATE TABLE IF NOT EXISTS polls (
+      id SERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      message_id TEXT,
+      creator_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      question TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      yes_label TEXT NOT NULL DEFAULT 'Ano',
+      no_label TEXT NOT NULL DEFAULT 'Ne',
+      abstain BOOLEAN NOT NULL DEFAULT false,
+      role_id TEXT,
+      hide_results BOOLEAN NOT NULL DEFAULT false,
+      color INT,
+      status TEXT NOT NULL DEFAULT 'open',
+      ends_at TIMESTAMPTZ NOT NULL,
+      closed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS poll_ballots (
+      poll_id INT NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      choice TEXT NOT NULL,
+      voted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (poll_id, user_id)
+    );
     CREATE TABLE IF NOT EXISTS ticket_notes (
       id SERIAL PRIMARY KEY,
       ticket_id INT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,

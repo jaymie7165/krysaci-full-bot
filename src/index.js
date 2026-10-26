@@ -19,6 +19,7 @@ import { scheduleStatsUpdate, startStatsSweeper } from './features/stats/index.j
 import { assignBaseRole } from './features/baserole/index.js';
 import { handleModInteraction } from './features/moderation/index.js';
 import { handleCardInteraction } from './features/cards/index.js';
+import { handlePollInteraction, startPollSweeper } from './features/polls/index.js';
 import { handleTonightInteraction, startHrajemeSweeper } from './features/tonight/index.js';
 import { scheduleBoardUpdate, startBoardUpdater } from './features/tonight/board.js';
 
@@ -44,6 +45,7 @@ client.once(Events.ClientReady, async (c) => {
   cleanupLounges(c).catch(console.error);
   startPulseSweeper(c);
   startHrajemeSweeper(c);
+  startPollSweeper(c);
   startBoardUpdater(c);
   startStreamPoller(c);
   startStatsSweeper(c);
@@ -68,6 +70,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     else if (feature === 'tour') await handleTournamentInteraction(interaction);
     else if (feature === 'mod') await handleModInteraction(interaction);
     else if (feature === 'card') await handleCardInteraction(interaction);
+    else if (feature === 'poll') await handlePollInteraction(interaction);
     else if (feature === 'tonight' || feature === 'hr') await handleTonightInteraction(interaction);
     else if (feature === 'lounge') await handleLoungeInteraction(interaction);
     else if (feature === 'pulse') await handlePulseInteraction(interaction);
